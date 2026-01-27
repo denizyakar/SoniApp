@@ -6,14 +6,31 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		E97D19A52F263F6300B43D36 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = E97D19A42F263F6300B43D36 /* SocketIO */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
-		E9582F132F24FBA000D1189A /* ChatApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChatApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E9582F132F24FBA000D1189A /* SoniApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SoniApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E97D19A92F26408600B43D36 /* Exceptions for "SoniApp" folder in "SoniApp" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E9582F122F24FBA000D1189A /* SoniApp */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		E9582F152F24FBA000D1189A /* ChatApp */ = {
+		E9582F152F24FBA000D1189A /* SoniApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ChatApp;
+			exceptions = (
+				E97D19A92F26408600B43D36 /* Exceptions for "SoniApp" folder in "SoniApp" target */,
+			);
+			path = SoniApp;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E97D19A52F263F6300B43D36 /* SocketIO in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -32,7 +50,7 @@
 		E9582F0A2F24FBA000D1189A = {
 			isa = PBXGroup;
 			children = (
-				E9582F152F24FBA000D1189A /* ChatApp */,
+				E9582F152F24FBA000D1189A /* SoniApp */,
 				E9582F142F24FBA000D1189A /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +58,7 @@
 		E9582F142F24FBA000D1189A /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E9582F132F24FBA000D1189A /* ChatApp.app */,
+				E9582F132F24FBA000D1189A /* SoniApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +66,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E9582F122F24FBA000D1189A /* ChatApp */ = {
+		E9582F122F24FBA000D1189A /* SoniApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E9582F1E2F24FBA100D1189A /* Build configuration list for PBXNativeTarget "ChatApp" */;
+			buildConfigurationList = E9582F1E2F24FBA100D1189A /* Build configuration list for PBXNativeTarget "SoniApp" */;
 			buildPhases = (
 				E9582F0F2F24FBA000D1189A /* Sources */,
 				E9582F102F24FBA000D1189A /* Frameworks */,
@@ -61,13 +79,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				E9582F152F24FBA000D1189A /* ChatApp */,
+				E9582F152F24FBA000D1189A /* SoniApp */,
 			);
-			name = ChatApp;
+			name = SoniApp;
 			packageProductDependencies = (
+				E97D19A42F263F6300B43D36 /* SocketIO */,
 			);
 			productName = ChatApp;
-			productReference = E9582F132F24FBA000D1189A /* ChatApp.app */;
+			productReference = E9582F132F24FBA000D1189A /* SoniApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -85,7 +104,7 @@
 					};
 				};
 			};
-			buildConfigurationList = E9582F0E2F24FBA000D1189A /* Build configuration list for PBXProject "ChatApp" */;
+			buildConfigurationList = E9582F0E2F24FBA000D1189A /* Build configuration list for PBXProject "SoniApp" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -94,12 +113,15 @@
 			);
 			mainGroup = E9582F0A2F24FBA000D1189A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E97D19A32F263F6300B43D36 /* XCRemoteSwiftPackageReference "socket" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E9582F142F24FBA000D1189A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				E9582F122F24FBA000D1189A /* ChatApp */,
+				E9582F122F24FBA000D1189A /* SoniApp */,
 			);
 		};
 /* End PBXProject section */
@@ -256,11 +278,13 @@
 				DEVELOPMENT_TEAM = 8356NA7XBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ChatApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -288,11 +312,13 @@
 				DEVELOPMENT_TEAM = 8356NA7XBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ChatApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -313,7 +339,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E9582F0E2F24FBA000D1189A /* Build configuration list for PBXProject "ChatApp" */ = {
+		E9582F0E2F24FBA000D1189A /* Build configuration list for PBXProject "SoniApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E9582F1C2F24FBA100D1189A /* Debug */,
@@ -322,7 +348,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E9582F1E2F24FBA100D1189A /* Build configuration list for PBXNativeTarget "ChatApp" */ = {
+		E9582F1E2F24FBA100D1189A /* Build configuration list for PBXNativeTarget "SoniApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E9582F1F2F24FBA100D1189A /* Debug */,
@@ -332,6 +358,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E97D19A32F263F6300B43D36 /* XCRemoteSwiftPackageReference "socket" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/socketio/socket.io-client-swift";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E97D19A42F263F6300B43D36 /* SocketIO */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E97D19A32F263F6300B43D36 /* XCRemoteSwiftPackageReference "socket" */;
+			productName = SocketIO;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E9582F0B2F24FBA000D1189A /* Project object */;
 }
