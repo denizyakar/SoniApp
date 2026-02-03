@@ -73,6 +73,7 @@ class ChatViewModel: ObservableObject {
     
     // --- SEND MESSAGE ---
     func sendMessage() {
+        print("sendmessage fonksiyonu çalıştı! bu 1 mi 2 mi?")
         guard !text.trimmingCharacters(in: .whitespaces).isEmpty,
               let myId = AuthManager.shared.currentUserId,
               let otherId = currentUser?.id else { return }

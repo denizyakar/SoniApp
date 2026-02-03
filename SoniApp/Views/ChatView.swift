@@ -1,5 +1,4 @@
-//
-//  ContentView.swift
+//  ChatView.swift
 //  SoniApp
 //
 //  Created by Ali Deniz Yakar on 24.01.2026.
@@ -12,7 +11,6 @@ struct ChatView: View {
     let user: ChatUser
     @StateObject private var viewModel = ChatViewModel()
     
-    // SWIFTDATA MAGIC 🪄
     // Automatically fetch messages from local DB and update UI on change
     @Query private var messages: [MessageItem]
     
@@ -70,7 +68,13 @@ struct ChatView: View {
     var inputArea: some View {
         HStack {
             TextField("Type a message...", text: $viewModel.text)
-                .textFieldStyle(.roundedBorder)
+                .padding(12)
+                .font(.system(size: 16))
+                .textFieldStyle(.plain)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(.systemGray), lineWidth: 1)
+                    )
                 .padding(.horizontal)
             
             Button(action: {
@@ -99,7 +103,7 @@ struct MessageBubble: View {
             
             Text(message.text)
                 .padding()
-                .background(message.isFromCurrentUser ? Color.blue : Color(.systemGray5))
+                .background(message.isFromCurrentUser ? Color.blue : Color(.systemGray))
                 .foregroundColor(message.isFromCurrentUser ? .white : .black)
                 .cornerRadius(12)
                 .frame(maxWidth: 250, alignment: message.isFromCurrentUser ? .trailing : .leading)
@@ -112,6 +116,76 @@ struct MessageBubble: View {
     }
 }
 
+
 #Preview {
-    ChatView(user: ChatUser(id: "test_id", username: "Deneme Kullanıcısı"))
+    // Virtual database
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: MessageItem.self, configurations: config)
+    
+    let myPreviewId = "my_test_id"
+    let partnerId = "other_user_id"
+    
+    UserDefaults.standard.set("fake_token", forKey: "authToken")
+    UserDefaults.standard.set(myPreviewId, forKey: "userId") // AuthManager knows my id from here
+    AuthManager.shared.currentUserId = myPreviewId
+    
+    // Create messages
+    // Note: receiverId and senderId must match.
+    
+    // Message 1: I sent
+    let msg1 = MessageItem(
+        id: "1",
+        text: "Hi, how is it going?",
+        senderId: myPreviewId,
+        receiverId: partnerId,
+        date: Date()
+    )
+    
+    // Message 2: They sent
+    let msg2 = MessageItem(
+        id: "2",
+        text: "It's going well, how about you?",
+        senderId: partnerId,
+        receiverId: myPreviewId,
+        date: Date()
+    )
+    
+    // Message 3: I answered
+    let msg3 = MessageItem(
+        id: "3",
+        text: "Good, thanks.",
+        senderId: myPreviewId,
+        receiverId: partnerId,
+        date: Date()
+    )
+    
+    // Add to virtual database
+    container.mainContext.insert(msg1)
+    container.mainContext.insert(msg2)
+    container.mainContext.insert(msg3)
+    
+    // Other user
+    let chatPartner = ChatUser(id: partnerId, username: "Test Friend")
+    
+    // Draw the view
+    return VStack(spacing: 0) {
+        
+        // Light mode
+        NavigationStack { // wrapping to navigation be seen
+            ChatView(user: chatPartner)
+        }
+        .environment(\.colorScheme, .light)
+        .previewDisplayName("Light Mode")
+        
+        Divider().background(Color.red)
+        
+        // Dark mode
+        NavigationStack {
+            ChatView(user: chatPartner)
+        }
+        .environment(\.colorScheme, .dark)
+        .previewDisplayName("Dark Mode")
+    }
+    .modelContainer(container)
 }
+

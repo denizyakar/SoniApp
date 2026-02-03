@@ -11,17 +11,17 @@ import SwiftData
 struct ChatListView: View {
     @StateObject private var viewModel = ChatListViewModel()
     
-    // SWIFTDATA MAGIC 🪄 (Kullanıcıları Diskten Oku)
+    // Read users from swiftdata
     @Query private var users: [UserItem]
     
     @Environment(\.modelContext) private var context
     
     var body: some View {
         NavigationStack {
-            List(users) { user in // Artık UserItem listesi dönüyor
+            List(users) { user in
                 
-                // DİKKAT: ChatView bizden 'ChatUser' (Struct) istiyor.
-                // Veritabanı objesini (UserItem) -> Struct'a çevirip yolluyoruz.
+                // ChatView wants struct
+                // Changing UserItem to struct and sending it
                 let chatUserStruct = ChatUser(id: user.id, username: user.username)
                 
                 NavigationLink(destination: ChatView(user: chatUserStruct)) {
@@ -29,8 +29,8 @@ struct ChatListView: View {
                         Image(systemName: user.avatarName)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(width: 40, height: 40)
-                            .padding(.trailing, 5)
+                            .frame(width: 48, height: 48)
+                            .padding(.trailing, 8)
                             .foregroundColor(.blue)
                         
                         VStack(alignment: .leading) {
@@ -38,11 +38,11 @@ struct ChatListView: View {
                                 .font(.headline)
                             
                             Text("Click to start chatting")
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                                .font(.footnote)
+                                .foregroundColor(Color(.systemGray))
                         }
                     }
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 8)
                 }
             }
             .navigationTitle("Messages")
@@ -55,13 +55,45 @@ struct ChatListView: View {
                 }
             }
             .onAppear {
-                // ViewModel'e veritabanı yetkisini ver ve sunucuyu kontrol et
+                // Grant database permissions to the ViewModel and check the server.
                 viewModel.setup(context: context)
             }
         }
     }
 }
 
+// Testing purposes, might crash:
+
+/*
+
 #Preview {
-    ChatListView()
+    // Virtual Database
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: UserItem.self, configurations: config)
+    
+    let user1 = UserItem(id: "1", username: "PreviewUser")
+    let user2 = UserItem(id: "2", username: "PreviewUser2")
+    let user3 = UserItem(id: "3", username: "PreviewUser3")
+    
+    container.mainContext.insert(user1)
+    container.mainContext.insert(user2)
+    container.mainContext.insert(user3)
+    
+    // Appearance (Light and Dark Theme side by side)
+    return VStack(spacing: 0) {
+        // Light mode
+        ChatListView()
+            .environment(\.colorScheme, .light)
+            .previewDisplayName("Light Mode")
+        
+        Divider().background(Color.red) // divider line
+        
+        // Dark mode
+        ChatListView()
+            .environment(\.colorScheme, .dark)
+            .previewDisplayName("Dark Mode")
+    }
+    .modelContainer(container) // connecting virtual database
 }
+
+*/

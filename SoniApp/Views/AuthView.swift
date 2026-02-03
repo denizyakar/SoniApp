@@ -19,7 +19,7 @@ struct AuthView: View {
             VStack(spacing: 16) {
                 // Title
                 Text("Soni App")
-                    .font(.largeTitle)
+                    .font(.system(size:44))
                     .bold()
                     .foregroundColor(Color.blue)
                 
@@ -31,23 +31,32 @@ struct AuthView: View {
                 
                 // TextFields
                 TextField("Username", text: $username)
-                    .textFieldStyle(.roundedBorder)
                     .autocapitalization(.none)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color(.systemGray),lineWidth: 1)
+                    )
                     .padding(.horizontal)
-                
+                    
                 SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color(.systemGray),lineWidth: 1)
+                    )
                     .padding(.horizontal)
                     .padding(.bottom)
                 // Button
                 Button(action: handleAction) {
                     Text(isLoginMode ? "Log In" : "Register")
-                        .font(.headline)
+                        .font(.system(size: 20))
+                        .bold()
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.blue)
-                        .cornerRadius(10)
+                        .cornerRadius(12)
                 }
                 .padding(.horizontal)
                 .padding(.top)
@@ -58,6 +67,7 @@ struct AuthView: View {
                     message = ""
                 }) {
                     Text(isLoginMode ? "Don't have an account? Register" : "Already have an account? Log In")
+                        .padding(.top)
                         .foregroundColor(.blue)
                         .bold()
                 }

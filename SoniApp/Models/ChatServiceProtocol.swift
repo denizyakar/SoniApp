@@ -12,7 +12,7 @@ import SocketIO
 protocol ChatServiceProtocol {
     var onMessageReceived: ((Message) -> Void)? { get set }
     func connect()
-    func sendMessage(text: String, receiverId: String) // Burayı da güncelledik
+    func sendMessage(text: String, receiverId: String)
 }
 
 // A fake service for development and UI testing.
@@ -21,12 +21,13 @@ class SocketChatService: ChatServiceProtocol {
     static let shared = SocketChatService()
     
     var onMessageReceived: ((Message) -> Void)?
+    var onNewUserRegistered: (() -> Void)?
     
     private var manager: SocketManager
     private var socket: SocketIOClient
     
     private init() {
-        // IP Adresini kontrol et
+        // IP adress
         let url = URL(string: "https://soni-app.xyz")!
         
         manager = SocketManager(socketURL: url, config: [
@@ -39,12 +40,11 @@ class SocketChatService: ChatServiceProtocol {
     }
     
     func connect() {
-        print("[SocketService] Bağlanılıyor...")
+        print("[SocketService] is connecting...")
         socket.connect()
     }
     
-    // NOT: Artık mesaj gönderme işini ChatViewModel yapıyor ama
-    // protokol gereği burada tutuyoruz (veya ileride kullanırız diye güncelledik)
+    // Note: The one who sends the messages is ChatViewModel but we still hold it here
     func sendMessage(text: String, receiverId: String) {
         guard let myId = AuthManager.shared.currentUserId else { return }
         
@@ -58,32 +58,47 @@ class SocketChatService: ChatServiceProtocol {
     }
     
     private func setupListeners() {
-        // 1. Bağlantı Başarılı Olduğunda
+        // When the connection is succesful
+        socket.off(clientEvent: .connect)
         socket.on(clientEvent: .connect) { data, ack in
-            print("[SocketService] BAĞLANDI! ✅")
+            print("[SocketService] is Connected! ✅")
         }
         
-        // 2. Yeni Mesaj Geldiğinde (HATA VEREN KISIM DÜZELTİLDİ)
+        // When a new user registers:
+        socket.off("user_registered")
+        
+        socket.on("user_registered") { [weak self] data, ack in
+            print("SOCKET: A new user just registered!")
+            
+            self?.onNewUserRegistered?()
+                
+        }
+        
+        
+        socket.off("receive_message")
+        // When a new message is received:
         socket.on("receive_message") { [weak self] data, ack in
-            // Manuel parse etmek yerine Codable kullanıyoruz
+            // Using Codable instead of parsing manually
             guard let dataArray = data as? [[String: Any]],
                   let json = dataArray.first else { return }
             
             do {
-                // Dictionary -> Data -> Message (Model) dönüşümü
+                // Dictionary -> Data -> Message (Model) conversion
                 let jsonData = try JSONSerialization.data(withJSONObject: json)
                 let message = try JSONDecoder().decode(Message.self, from: jsonData)
                 
-                // Callback'i tetikle
+                print("Message from Socket: - id:\(message.id) - Text: \(message.text)")
+                
+                // Trigger Callback
                 self?.onMessageReceived?(message)
                 
             } catch {
-                print("Mesaj parse hatası: \(error)")
+                print("Message parse error: \(error)")
             }
         }
     }
     
-    // ViewModel'in socket'e erişmesi için gerekli
+    // Necessary for ViewModel to access Socket
     func getSocket() -> SocketIOClient {
         return socket
     }

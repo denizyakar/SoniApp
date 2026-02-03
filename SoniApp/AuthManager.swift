@@ -9,20 +9,20 @@ class AuthManager: ObservableObject {
     var currentUserId: String?
     var currentUsername: String?
     
-    // Senin Tailscale IP'n
+    // Domain IP
     private let baseURL = "https://soni-app.xyz"
     
-    // ÖZEL SESSION: Proxy ayarlarını devre dışı bırakıyoruz!
+    // Disabling proxy settings
     private var session: URLSession {
         let config = URLSessionConfiguration.default
-        config.connectionProxyDictionary = [:] // Boş sözlük = Proxy Yok!
+        config.connectionProxyDictionary = [:] // Empty dict -> no proxy
         config.timeoutIntervalForRequest = 30.0
         return URLSession(configuration: config)
     }
     
     init() {
         if let token = UserDefaults.standard.string(forKey: "authToken") {
-            print("💾 Kayıtlı token bulundu: \(token), Otomatik giriş yapılıyor.")
+            print("Found existing token: \(token), Logging in automatically.")
             
             self.currentUserId = UserDefaults.standard.string(forKey: "userId")
             self.currentUsername = UserDefaults.standard.string(forKey: "username")
@@ -31,7 +31,7 @@ class AuthManager: ObservableObject {
         }
     }
     
-    // --- LOGIN ---
+    // Login
     func login(username: String, pass: String, completion: @escaping (Bool, String?) -> Void) {
         let url = URL(string: "\(baseURL)/login")!
         var request = URLRequest(url: url)
@@ -41,11 +41,11 @@ class AuthManager: ObservableObject {
         let body: [String: Any] = ["username": username, "password": pass]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        // URLSession.shared yerine yukarıda tanımladığımız 'session'ı kullanıyoruz
+        // Instead of URLSession.shared, we use the 'session' we defined above
         session.dataTask(with: request) { data, response, error in
             guard let data = data, error == nil else {
-                print("Hata Detayı: \(error?.localizedDescription ?? "Bilinmiyor")")
-                completion(false, "Bağlantı hatası: \(error?.localizedDescription ?? "")")
+                print("Error info: \(error?.localizedDescription ?? "Unknown error")")
+                completion(false, "Connection error: \(error?.localizedDescription ?? "")")
                 return
             }
             
@@ -54,14 +54,14 @@ class AuthManager: ObservableObject {
                     self.saveUser(token: token, userId: json["userId"] as? String, username: json["username"] as? String)
                     completion(true, nil)
                 } else {
-                    let message = json["message"] as? String ?? "Bilinmeyen hata"
+                    let message = json["message"] as? String ?? "Unknown error"
                     completion(false, message)
                 }
             }
         }.resume()
     }
     
-    // --- REGISTER ---
+    // Register
     func register(username: String, pass: String, completion: @escaping (Bool, String?) -> Void) {
         let url = URL(string: "\(baseURL)/register")!
         var request = URLRequest(url: url)
@@ -71,32 +71,32 @@ class AuthManager: ObservableObject {
         let body: [String: Any] = ["username": username, "password": pass]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        // URLSession.shared yerine 'session' kullanıyoruz
+        // Instead of URLSession.shared, we use the 'session' we defined above.
         session.dataTask(with: request) { data, response, error in
             guard let data = data, error == nil else {
-                print("Hata Detayı: \(error?.localizedDescription ?? "Bilinmiyor")")
-                completion(false, "Bağlantı hatası: \(error?.localizedDescription ?? "")")
+                print("Error info: \(error?.localizedDescription ?? "Unknown")")
+                completion(false, "Connection error: \(error?.localizedDescription ?? "")")
                 return
             }
             
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 201 {
-                completion(true, "Kayıt başarılı! Şimdi giriş yapabilirsin.")
+                completion(true, "Register succesful! Now you can log in.")
             } else {
                 if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    let message = json["message"] as? String ?? "Kayıt yapılamadı"
+                    let message = json["message"] as? String ?? "Couldn't register."
                     completion(false, message)
                 } else {
-                    completion(false, "Sunucu hatası")
+                    completion(false, "Server error. Try again later.")
                 }
             }
         }.resume()
     }
     
-    // --- LOGOUT ve SAVE USER aynı kalıyor ---
+    // Logout and Save User stays same
     func logout() {
         UserDefaults.standard.removeObject(forKey: "authToken")
-        UserDefaults.standard.removeObject(forKey: "userId")   // <-- EKLE
-        UserDefaults.standard.removeObject(forKey: "username") // <-- EKLE
+        UserDefaults.standard.removeObject(forKey: "userId")
+        UserDefaults.standard.removeObject(forKey: "username")
                 
         self.isAuthenticated = false
         self.currentUserId = nil
@@ -106,7 +106,6 @@ class AuthManager: ObservableObject {
     private func saveUser(token: String, userId: String?, username: String?) {
         UserDefaults.standard.set(token, forKey: "authToken")
         
-        // --- YENİ EKLENEN KISIM ---
         if let userId = userId {
             UserDefaults.standard.set(userId, forKey: "userId")
         }
@@ -122,27 +121,26 @@ class AuthManager: ObservableObject {
         }
     }
     
-    // --- KULLANICILARI ÇEK (FETCH USERS) ---
+    // Fetching Users
         func fetchAllUsers(completion: @escaping ([ChatUser]?) -> Void) {
             let url = URL(string: "\(baseURL)/users")!
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
             
-            // Proxy ayarlı session'ımızı kullanıyoruz
             session.dataTask(with: request) { data, response, error in
                 guard let data = data, error == nil else {
-                    print("Kullanıcı çekme hatası: \(error?.localizedDescription ?? "")")
+                    print("Fetching users error: \(error?.localizedDescription ?? "")")
                     completion(nil)
                     return
                 }
                 
                 do {
                     let users = try JSONDecoder().decode([ChatUser].self, from: data)
-                    // Kendimizi listeden çıkaralım (Opsiyonel)
+                    // Not including current user in the list:
                     let filteredUsers = users.filter { $0.username != self.currentUsername }
                     completion(filteredUsers)
                 } catch {
-                    print("JSON Parse Hatası: \(error)")
+                    print("JSON Parse Error: \(error)")
                     completion(nil)
                 }
             }.resume()

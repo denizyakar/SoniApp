@@ -11,22 +11,34 @@ import SwiftData
 import Combine
 
 class ChatListViewModel: ObservableObject {
-    // Artık @Published var users tutmuyoruz, çünkü View direkt veritabanına bakacak.
     
     private var modelContext: ModelContext?
     
+    init() {
+        print("ChatListViewModel initialized")
+        fetchUsers()
+        
+        SocketChatService.shared.onNewUserRegistered = { [weak self] in
+            print("ViewModel: Received new register signal, refreshing list...")
+            
+            DispatchQueue.main.async {
+                self?.fetchUsers()
+            }
+        }
+        
+    }
     func setup(context: ModelContext) {
         self.modelContext = context
         fetchUsers()
     }
     
     func fetchUsers() {
-        // 1. Sunucudan veriyi çek (Struct olarak gelir)
+        // Fetch users from the server(comes as struct)
         AuthManager.shared.fetchAllUsers { [weak self] users in
             guard let self = self, let users = users else { return }
             
             DispatchQueue.main.async {
-                // 2. Gelen veriyi Veritabanına Yaz
+                // Save the incoming data to database
                 self.saveUsersToDB(users: users)
             }
         }
@@ -36,8 +48,8 @@ class ChatListViewModel: ObservableObject {
         guard let context = modelContext else { return }
         
         for user in users {
-            // Eğer zaten varsa güncelle, yoksa oluştur (Upsert mantığı)
-            // SwiftData @Attribute(.unique) sayesinde ID aynıysa üzerine yazar.
+            // Update if it already exists, create it otherwise (Upsert logic)
+            // SwiftData overwrites the ID if it's the same thanks to @Attribute(.unique).
             let newUserItem = UserItem(
                 id: user.id,
                 username: user.username,
