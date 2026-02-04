@@ -28,7 +28,7 @@ class SocketChatService: ChatServiceProtocol {
     
     private init() {
         // IP adress
-        let url = URL(string: "https://soni-app.xyz")!
+        let url = URL(string: "your_url")!
         
         manager = SocketManager(socketURL: url, config: [
             .log(true),

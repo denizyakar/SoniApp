@@ -62,6 +62,10 @@ struct ChatView: View {
         .onAppear {
             // Inject user and database context into ViewModel
             viewModel.setup(user: user, context: context)
+            AuthManager.shared.currentChatPartnerId = user.id
+        }
+        .onDisappear {
+            AuthManager.shared.currentChatPartnerId = nil
         }
     }
     

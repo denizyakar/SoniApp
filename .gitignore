@@ -1,0 +1,27 @@
+# --- macOS Çöpleri ---
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Xcode ve iOS Gereksizleri ---
+build/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Kişisel Xcode Ayarları (Burası ÇOK ÖNEMLİ, sürekli dosya değişti diye uyarı verir yoksa)
+*.xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+
+# --- Swift Package Manager ---
+.build/
+
+# --- GÜVENLİK (Bunları sakın atma) ---
+*.p8                 # Apple Push Notification Anahtarı (EN ÖNEMLİSİ)
+Secrets.swift        # Eğer şifre tuttuğun özel bir dosya varsa
+GoogleService-Info.plist  # Firebase varsa

@@ -5,12 +5,40 @@ import Combine
 class AuthManager: ObservableObject {
     static let shared = AuthManager()
     @Published var isAuthenticated: Bool = false
-    
+    var currentChatPartnerId: String? = nil
     var currentUserId: String?
     var currentUsername: String?
+    //push notif token
+    var deviceToken: String?
+    
+    // 2. Function called by AppDelegate
+        func setDeviceToken(_ token: String) {
+            self.deviceToken = token
+            print("AuthManager: Token saved locally: \(token)")
+            
+            // If user is ALREADY logged in, send token immediately
+            if isAuthenticated { 
+                sendTokenToBackend()
+            }
+        }
+    
+    // 3. Helper function to call TokenService
+    private func sendTokenToBackend() {
+        guard let token = deviceToken, let username = self.currentUsername else { return }
+            
+            print("AuthManager: Token sending to backend...")
+            
+        TokenService.shared.saveDeviceToken(username: username, token: token) { success in
+                if success {
+                    print("✅ Token succesfully saved to server")
+                } else {
+                    print("⚠️ Token couldn't be saved to server")
+                }
+            }
+        }
     
     // Domain IP
-    private let baseURL = "https://soni-app.xyz"
+    private let baseURL = "your_url"
     
     // Disabling proxy settings
     private var session: URLSession {
@@ -94,6 +122,12 @@ class AuthManager: ObservableObject {
     
     // Logout and Save User stays same
     func logout() {
+        
+        // Delete the record in the server before logging out
+        if let username = self.currentUsername {
+                TokenService.shared.removeDeviceToken(username: username)
+            }
+        
         UserDefaults.standard.removeObject(forKey: "authToken")
         UserDefaults.standard.removeObject(forKey: "userId")
         UserDefaults.standard.removeObject(forKey: "username")
@@ -101,6 +135,7 @@ class AuthManager: ObservableObject {
         self.isAuthenticated = false
         self.currentUserId = nil
         self.currentUsername = nil
+        
     }
     
     private func saveUser(token: String, userId: String?, username: String?) {
@@ -118,6 +153,8 @@ class AuthManager: ObservableObject {
         
         DispatchQueue.main.async {
             self.isAuthenticated = true
+            
+            self.sendTokenToBackend()
         }
     }
     
@@ -137,7 +174,7 @@ class AuthManager: ObservableObject {
                 do {
                     let users = try JSONDecoder().decode([ChatUser].self, from: data)
                     // Not including current user in the list:
-                    let filteredUsers = users.filter { $0.username != self.currentUsername }
+                    let filteredUsers = users.filter { $0.username != AuthManager.shared.currentUsername }
                     completion(filteredUsers)
                 } catch {
                     print("JSON Parse Error: \(error)")

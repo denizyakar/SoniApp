@@ -11,6 +11,7 @@ import SwiftData
 @main
 struct ChatAppApp: App {
     @ObservedObject var authManager = AuthManager.shared
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate //pushnotif
     
     init() {
             // Connection starts after app is running

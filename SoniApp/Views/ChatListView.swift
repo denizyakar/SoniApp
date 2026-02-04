@@ -18,7 +18,7 @@ struct ChatListView: View {
     
     var body: some View {
         NavigationStack {
-            List(users) { user in
+            List(users.filter { $0.id != AuthManager.shared.currentUserId }) { user in
                 
                 // ChatView wants struct
                 // Changing UserItem to struct and sending it
@@ -62,7 +62,7 @@ struct ChatListView: View {
     }
 }
 
-// Testing purposes, might crash:
+// Testing purposes, might crash the preview:
 
 /*
 
