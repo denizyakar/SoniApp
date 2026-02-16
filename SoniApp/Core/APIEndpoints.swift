@@ -21,7 +21,7 @@ import Foundation
 /// Şimdi sadece `baseURL`'i değiştirmen yeterli.
 enum APIEndpoints {
     
-    static let baseURL = "https://soni-app.xyz"
+    static let baseURL = "your_url"
     
     // MARK: - Auth
     static var login: URL {
