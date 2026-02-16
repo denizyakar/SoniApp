@@ -1,105 +1,175 @@
 //
-//  ChatService.swift
+//  ChatServiceProtocol.swift
 //  SoniApp
 //
-//  Created by Ali Deniz Yakar on 24.01.2026.
+//  TAMAMEN YENİDEN YAZILDI.
+//
+//  Değişiklikler:
+//  1. getSocket() KALDIRILDI — leaky abstraction düzeltildi
+//  2. Combine Publisher eklendi — ViewModel raw socket'e erişmek zorunda değil
+//  3. Singleton kaldırıldı — DependencyContainer'dan inject ediliyor
+//  4. onMessageReceived callback → Combine publisher'a dönüştürüldü
 //
 
 import Foundation
 import SocketIO
+import Combine
 
-// This is our "Contract". Any chat service MUST behave like this.
+// MARK: - Protocol
+
+/// Chat servisi sözleşmesi.
+///
+/// **Neden `getSocket()` kaldırıldı?**
+/// Eskiden `ChatViewModel` şunu yapıyordu:
+/// ```swift
+/// socketManager.getSocket().on("receive_message") { data, ack in ... }
+/// ```
+/// Bu, ViewModel'in Socket.IO'nun iç yapısını bildiği anlamına geliyordu.
+/// Yarın WebSocket çözümünü değiştirmek istersen (ör. URLSessionWebSocketTask),
+/// ViewModel'i baştan yazman gerekirdi.
+///
+/// Şimdi ViewModel sadece `messagePublisher`'ı dinliyor.
+/// Alt yapı ne olursa olsun (Socket.IO, gRPC, WebSocket) ViewModel'e `Message` gelir.
+/// Bu, **Dependency Inversion Principle** (SOLID'in D'si) uygulamasıdır.
 protocol ChatServiceProtocol {
-    var onMessageReceived: ((Message) -> Void)? { get set }
+    /// Gelen mesajları dinlemek için Combine publisher.
+    /// ViewModel bunu subscribe eder.
+    var messagePublisher: AnyPublisher<Message, Never> { get }
+    
+    /// Yeni kullanıcı kaydı sinyali
+    var userRegisteredPublisher: AnyPublisher<Void, Never> { get }
+    
+    /// Bağlantı durumu
+    var isConnected: Bool { get }
+    
     func connect()
-    func sendMessage(text: String, receiverId: String)
+    func disconnect()
+    func sendMessage(text: String, senderId: String, receiverId: String)
 }
 
-// A fake service for development and UI testing.
-class SocketChatService: ChatServiceProtocol {
-    // SINGLETON
-    static let shared = SocketChatService()
+// MARK: - Implementation
+
+/// Socket.IO tabanlı chat servisi.
+///
+/// **Değişiklikler (eski halinden farklar):**
+/// 1. `static let shared` → DI ile inject ediliyor
+/// 2. `getSocket()` → kaldırıldı. ViewModel artık raw socket'e erişemez
+/// 3. Closure callback'ler → Combine `PassthroughSubject` ile replace edildi
+/// 4. `sendMessage` artık `senderId` parametresi alıyor — AuthManager.shared'a bağımlılık YOK
+///
+/// **Neden Combine PassthroughSubject?**
+/// `PassthroughSubject` bir "köprü"dür: imperativ dünyadan (Socket.IO callback)
+/// dekleratif dünyaya (Combine pipeline) bağlanır. Socket.IO callback'lerini
+/// Combine stream'ine dönüştürmenin en temiz yolu budur.
+final class SocketChatService: ChatServiceProtocol {
     
-    var onMessageReceived: ((Message) -> Void)?
-    var onNewUserRegistered: (() -> Void)?
+    // MARK: - Combine Subjects (iç kullanım)
+    
+    /// Gelen mesajları yayan subject. Private: dışarıdan `.send()` çağrılamaz.
+    private let _messageSubject = PassthroughSubject<Message, Never>()
+    
+    /// Yeni kullanıcı kaydı sinyali
+    private let _userRegisteredSubject = PassthroughSubject<Void, Never>()
+    
+    // MARK: - Public Publishers (dışarıya açılan arayüz)
+    
+    var messagePublisher: AnyPublisher<Message, Never> {
+        _messageSubject.eraseToAnyPublisher()
+    }
+    
+    var userRegisteredPublisher: AnyPublisher<Void, Never> {
+        _userRegisteredSubject.eraseToAnyPublisher()
+    }
+    
+    // MARK: - Socket.IO internals
     
     private var manager: SocketManager
     private var socket: SocketIOClient
+    private(set) var isConnected: Bool = false
     
-    private init() {
-        // IP adress
-        let url = URL(string: "your_url")!
+    // MARK: - Init
+    
+    init() {
+        let url = URL(string: APIEndpoints.baseURL)!
         
         manager = SocketManager(socketURL: url, config: [
-            .log(true),
-            .compress
+            .log(false),     // Production'da log kapatıldı (eskiden .log(true) idi)
+            .compress,
+            .forceWebsockets(true)  // Daha stabil bağlantı
         ])
         socket = manager.defaultSocket
         
         setupListeners()
     }
     
+    // MARK: - Connection
+    
     func connect() {
-        print("[SocketService] is connecting...")
+        guard !isConnected else { return }  // Çift bağlantı önleme
+        print("[SocketService] Connecting...")
         socket.connect()
     }
     
-    // Note: The one who sends the messages is ChatViewModel but we still hold it here
-    func sendMessage(text: String, receiverId: String) {
-        guard let myId = AuthManager.shared.currentUserId else { return }
-        
+    func disconnect() {
+        socket.disconnect()
+        isConnected = false
+    }
+    
+    // MARK: - Send Message
+    
+    /// Mesaj gönderir.
+    ///
+    /// **Eski hali vs yeni hali:**
+    /// Eski: `sendMessage(text:, receiverId:)` → içeride `AuthManager.shared.currentUserId` kullanıyordu
+    /// Yeni: `sendMessage(text:, senderId:, receiverId:)` → dışarıdan alıyor
+    ///
+    /// **Neden?** Service katmanı, "kim giriş yapmış" bilgisini bilmemeli.
+    /// Bu, **Information Hiding** prensibidir. Servis sadece "şu mesajı gönder" der.
+    func sendMessage(text: String, senderId: String, receiverId: String) {
         let data: [String: Any] = [
             "text": text,
-            "senderId": myId,
+            "senderId": senderId,
             "receiverId": receiverId
         ]
-        
         socket.emit("chat_message", data)
     }
     
+    // MARK: - Private: Socket Listeners
+    
     private func setupListeners() {
-        // When the connection is succesful
-        socket.off(clientEvent: .connect)
-        socket.on(clientEvent: .connect) { data, ack in
-            print("[SocketService] is Connected! ✅")
+        // Bağlantı başarılı
+        socket.on(clientEvent: .connect) { [weak self] _, _ in
+            print("[SocketService] Connected ✅")
+            self?.isConnected = true
         }
         
-        // When a new user registers:
-        socket.off("user_registered")
-        
-        socket.on("user_registered") { [weak self] data, ack in
-            print("SOCKET: A new user just registered!")
-            
-            self?.onNewUserRegistered?()
-                
+        // Bağlantı koptu
+        socket.on(clientEvent: .disconnect) { [weak self] _, _ in
+            print("[SocketService] Disconnected ⚠️")
+            self?.isConnected = false
         }
         
+        // Yeni kullanıcı kaydı
+        socket.on("user_registered") { [weak self] _, _ in
+            print("[SocketService] New user registered signal received")
+            self?._userRegisteredSubject.send()
+        }
         
-        socket.off("receive_message")
-        // When a new message is received:
-        socket.on("receive_message") { [weak self] data, ack in
-            // Using Codable instead of parsing manually
+        // Yeni mesaj alındı
+        socket.on("receive_message") { [weak self] data, _ in
             guard let dataArray = data as? [[String: Any]],
                   let json = dataArray.first else { return }
             
             do {
-                // Dictionary -> Data -> Message (Model) conversion
                 let jsonData = try JSONSerialization.data(withJSONObject: json)
                 let message = try JSONDecoder().decode(Message.self, from: jsonData)
                 
-                print("Message from Socket: - id:\(message.id) - Text: \(message.text)")
-                
-                // Trigger Callback
-                self?.onMessageReceived?(message)
+                // Combine pipeline'ına gönder
+                self?._messageSubject.send(message)
                 
             } catch {
-                print("Message parse error: \(error)")
+                print("[SocketService] Message parse error: \(error)")
             }
         }
-    }
-    
-    // Necessary for ViewModel to access Socket
-    func getSocket() -> SocketIOClient {
-        return socket
     }
 }

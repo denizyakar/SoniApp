@@ -2,7 +2,13 @@
 //  ChatListViewModel.swift
 //  SoniApp
 //
-//  Created by Ali Deniz Yakar on 25.01.2026.
+//  YENİDEN YAZILDI.
+//
+//  Değişiklikler:
+//  1. SocketChatService.shared → Combine publisher ile dinleme
+//  2. AuthManager.shared.fetchAllUsers → AuthService (inject)
+//  3. ModelContext inline yönetimi → UserRepository
+//  4. DispatchQueue.main.async kalabalığı → Combine .receive(on:)
 //
 
 import Foundation
@@ -10,54 +16,46 @@ import SwiftUI
 import SwiftData
 import Combine
 
+/// Kullanıcı listesi ekranını yöneten ViewModel.
+@MainActor
 class ChatListViewModel: ObservableObject {
     
-    private var modelContext: ModelContext?
+    // MARK: - Dependencies
     
-    init() {
-        print("ChatListViewModel initialized")
-        fetchUsers()
+    private var userRepository: UserRepository?
+    private var authService: AuthService?
+    
+    private var cancellables = Set<AnyCancellable>()
+    
+    // MARK: - Setup
+    
+    func setup(context: ModelContext, authService: AuthService, chatService: SocketChatService) {
+        self.userRepository = UserRepository(modelContext: context)
+        self.authService = authService
         
-        SocketChatService.shared.onNewUserRegistered = { [weak self] in
-            print("ViewModel: Received new register signal, refreshing list...")
-            
-            DispatchQueue.main.async {
-                self?.fetchUsers()
+        // İlk yükleme
+        syncUsers()
+        
+        // Yeni kullanıcı kaydolduğunda listeyi güncelle
+        chatService.userRegisteredPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                self?.syncUsers()
+            }
+            .store(in: &cancellables)
+    }
+    
+    // MARK: - Sync Users
+    
+    private func syncUsers() {
+        guard let authService = authService else { return }
+        
+        Task {
+            do {
+                try await userRepository?.syncUsersFromServer(authService: authService)
+            } catch {
+                print("❌ User sync error: \(error.localizedDescription)")
             }
         }
-        
-    }
-    func setup(context: ModelContext) {
-        self.modelContext = context
-        fetchUsers()
-    }
-    
-    func fetchUsers() {
-        // Fetch users from the server(comes as struct)
-        AuthManager.shared.fetchAllUsers { [weak self] users in
-            guard let self = self, let users = users else { return }
-            
-            DispatchQueue.main.async {
-                // Save the incoming data to database
-                self.saveUsersToDB(users: users)
-            }
-        }
-    }
-    
-    private func saveUsersToDB(users: [ChatUser]) {
-        guard let context = modelContext else { return }
-        
-        for user in users {
-            // Update if it already exists, create it otherwise (Upsert logic)
-            // SwiftData overwrites the ID if it's the same thanks to @Attribute(.unique).
-            let newUserItem = UserItem(
-                id: user.id,
-                username: user.username,
-                avatarName: user.avatarName
-            )
-            context.insert(newUserItem)
-        }
-        
-        try? context.save()
     }
 }

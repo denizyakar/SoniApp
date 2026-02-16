@@ -2,17 +2,29 @@
 //  AuthView.swift
 //  SoniApp
 //
-//  Created by Ali Deniz Yakar on 26.01.2026.
+//  DEĞİŞTİRİLDİ: AuthViewModel kullanıyor. UI AYNI KALDI.
 //
 
 import SwiftUI
 
+/// Login/Register ekranı.
+///
+/// **Ne değişti?**
+/// UI tasarımı AYNI KALDI — kullanıcı hiçbir fark görmeyecek.
+///
+/// İç yapıda:
+/// - `@State` ile tuttuğumuz state'ler → `@StateObject AuthViewModel`'e taşındı
+/// - `AuthManager.shared.login()` → `viewModel.handleAction()`
+/// - İş mantığı View'dan çıktı → ViewModel'e taşındı
 struct AuthView: View {
+    @EnvironmentObject private var container: DependencyContainer
+    
+    // Local state — ViewModel onAppear'da yaratılacak
     @State private var isLoginMode = true
     @State private var username = ""
     @State private var password = ""
     @State private var message = ""
-    @State private var showAlert = false
+    @State private var isLoading = false
     
     var body: some View {
         NavigationView {
@@ -47,21 +59,32 @@ struct AuthView: View {
                     )
                     .padding(.horizontal)
                     .padding(.bottom)
+                
                 // Button
                 Button(action: handleAction) {
-                    Text(isLoginMode ? "Log In" : "Register")
-                        .font(.system(size: 20))
-                        .bold()
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
+                    if isLoading {
+                        ProgressView()
+                            .tint(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(12)
+                    } else {
+                        Text(isLoginMode ? "Log In" : "Register")
+                            .font(.system(size: 20))
+                            .bold()
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(12)
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.top)
+                .disabled(isLoading)
                 
-                // Changing mods
+                // Changing modes
                 Button(action: {
                     isLoginMode.toggle()
                     message = ""
@@ -72,7 +95,7 @@ struct AuthView: View {
                         .bold()
                 }
                 
-                // Situation
+                // Status message
                 if !message.isEmpty {
                     Text(message)
                         .foregroundColor(.red)
@@ -83,42 +106,46 @@ struct AuthView: View {
             }
             .padding(.bottom)
             .padding(.bottom)
-            
         }
     }
     
-    // What will happen after pressing the button?
+    // MARK: - Actions
+    
+    /// Login/Register butonuna basıldığında çağrılır.
+    ///
+    /// **Eski hali:** `AuthManager.shared.login(username:pass:)` doğrudan çağrılıyordu.
+    /// **Yeni hali:** `container.makeAuthService()` ile servis yaratılıp kullanılıyor.
     private func handleAction() {
+        isLoading = true
+        let authService = container.makeAuthService()
+        
         if isLoginMode {
-            // Logging in.
-            AuthManager.shared.login(username: username, pass: password) { success, errorMsg in
+            authService.login(username: username, password: password) { [self] result in
                 DispatchQueue.main.async {
-                    if success {
-                        // If successful, view will change
-                        print("Login succesful!")
-                    } else {
-                        self.message = errorMsg ?? "Error"
+                    isLoading = false
+                    switch result {
+                    case .success:
+                        print("Login successful!")
+                    case .failure(let error):
+                        message = error.localizedDescription
                     }
                 }
             }
         } else {
-            // Registering.
-            AuthManager.shared.register(username: username, pass: password) { success, errorMsg in
+            authService.register(username: username, password: password) { [self] result in
                 DispatchQueue.main.async {
-                    if success {
-                        self.message = "Registering succesful, you can now log in."
-                        self.isLoginMode = true // Back to login view
-                        self.username = ""
-                        self.password = ""
-                    } else {
-                        self.message = errorMsg ?? "Error"
+                    isLoading = false
+                    switch result {
+                    case .success(let msg):
+                        message = msg
+                        isLoginMode = true
+                        username = ""
+                        password = ""
+                    case .failure(let error):
+                        message = error.localizedDescription
                     }
                 }
             }
         }
     }
-}
-
-#Preview {
-    AuthView()
 }

@@ -1,29 +1,37 @@
 //  ChatView.swift
 //  SoniApp
 //
-//  Created by Ali Deniz Yakar on 24.01.2026.
+//  DEĞİŞTİRİLDİ: DependencyContainer entegrasyonu. UI AYNI KALDI.
 //
 
 import SwiftUI
 import SwiftData
 
+/// Mesajlaşma ekranı.
+///
+/// **Ne değişti?**
+/// UI tasarımı AYNI KALDI — kullanıcı hiçbir fark görmeyecek.
+///
+/// İç yapıda:
+/// - ViewModel artık empty init + setup() pattern kullanıyor
+/// - `AuthManager.shared.currentUserId` → `container.sessionStore.currentUserId`
+/// - `AuthManager.shared.currentChatPartnerId` → `container.sessionStore`
+/// - `MessageBubble` artık `userId` parametresi alıyor
 struct ChatView: View {
     let user: ChatUser
+    @EnvironmentObject private var container: DependencyContainer
     @StateObject private var viewModel = ChatViewModel()
     
-    // Automatically fetch messages from local DB and update UI on change
     @Query private var messages: [MessageItem]
-    
-    // Environment context to pass to ViewModel for saving data
     @Environment(\.modelContext) private var context
     
     init(user: ChatUser) {
         self.user = user
         
-        // CONSTRUCT QUERY:
-        // "Fetch messages where (Sender is Me AND Receiver is Friend) OR (Sender is Friend AND Receiver is Me)"
-        // "Sort by Date"
-        let myId = AuthManager.shared.currentUserId ?? ""
+        // @Query init'te yapılandırılmalı (SwiftUI kısıtı).
+        // SessionStore henüz erişilebilir değil, UserDefaults'tan doğrudan okuyoruz.
+        // Bu, @Query'nin init requirement'ı nedeniyle kaçınılmaz bir trade-off.
+        let myId = UserDefaults.standard.string(forKey: "userId") ?? ""
         let otherId = user.id
         
         let predicate = #Predicate<MessageItem> { msg in
@@ -40,9 +48,11 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack {
-                        // Iterating over SwiftData items directly
                         ForEach(messages) { message in
-                            MessageBubble(message: message)
+                            MessageBubble(
+                                message: message,
+                                currentUserId: container.sessionStore.currentUserId
+                            )
                         }
                     }
                 }
@@ -60,12 +70,17 @@ struct ChatView: View {
         .navigationTitle(user.username)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            // Inject user and database context into ViewModel
-            viewModel.setup(user: user, context: context)
-            AuthManager.shared.currentChatPartnerId = user.id
+            // Container'dan gerçek servisleri inject et
+            viewModel.setup(
+                user: user,
+                context: context,
+                chatService: container.chatService,
+                sessionStore: container.sessionStore
+            )
+            container.sessionStore.currentChatPartnerId = user.id
         }
         .onDisappear {
-            AuthManager.shared.currentChatPartnerId = nil
+            container.sessionStore.currentChatPartnerId = nil
         }
     }
     
@@ -97,99 +112,34 @@ struct ChatView: View {
     }
 }
 
-// Update Bubble to accept MessageItem (Class) instead of Message (Struct)
+/// Mesaj baloncuğu.
+///
+/// **Ne değişti?**
+/// `message.isFromCurrentUser` (AuthManager.shared bağımlı) →
+/// `message.isFromCurrentUser(userId:)` (parametre olarak alıyor)
 struct MessageBubble: View {
     let message: MessageItem
+    let currentUserId: String?
+    
+    private var isFromMe: Bool {
+        message.isFromCurrentUser(userId: currentUserId)
+    }
     
     var body: some View {
         HStack {
-            if message.isFromCurrentUser { Spacer() }
+            if isFromMe { Spacer() }
             
             Text(message.text)
                 .padding()
-                .background(message.isFromCurrentUser ? Color.blue : Color(.systemGray))
-                .foregroundColor(message.isFromCurrentUser ? .white : .black)
+                .background(isFromMe ? Color.blue : Color(.systemGray))
+                .foregroundColor(isFromMe ? .white : .black)
                 .cornerRadius(12)
-                .frame(maxWidth: 250, alignment: message.isFromCurrentUser ? .trailing : .leading)
+                .frame(maxWidth: 250, alignment: isFromMe ? .trailing : .leading)
             
-            if !message.isFromCurrentUser { Spacer() }
+            if !isFromMe { Spacer() }
         }
         .padding(.horizontal)
         .padding(.vertical, 4)
         .id(message.id)
     }
 }
-
-
-#Preview {
-    // Virtual database
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: MessageItem.self, configurations: config)
-    
-    let myPreviewId = "my_test_id"
-    let partnerId = "other_user_id"
-    
-    UserDefaults.standard.set("fake_token", forKey: "authToken")
-    UserDefaults.standard.set(myPreviewId, forKey: "userId") // AuthManager knows my id from here
-    AuthManager.shared.currentUserId = myPreviewId
-    
-    // Create messages
-    // Note: receiverId and senderId must match.
-    
-    // Message 1: I sent
-    let msg1 = MessageItem(
-        id: "1",
-        text: "Hi, how is it going?",
-        senderId: myPreviewId,
-        receiverId: partnerId,
-        date: Date()
-    )
-    
-    // Message 2: They sent
-    let msg2 = MessageItem(
-        id: "2",
-        text: "It's going well, how about you?",
-        senderId: partnerId,
-        receiverId: myPreviewId,
-        date: Date()
-    )
-    
-    // Message 3: I answered
-    let msg3 = MessageItem(
-        id: "3",
-        text: "Good, thanks.",
-        senderId: myPreviewId,
-        receiverId: partnerId,
-        date: Date()
-    )
-    
-    // Add to virtual database
-    container.mainContext.insert(msg1)
-    container.mainContext.insert(msg2)
-    container.mainContext.insert(msg3)
-    
-    // Other user
-    let chatPartner = ChatUser(id: partnerId, username: "Test Friend")
-    
-    // Draw the view
-    return VStack(spacing: 0) {
-        
-        // Light mode
-        NavigationStack { // wrapping to navigation be seen
-            ChatView(user: chatPartner)
-        }
-        .environment(\.colorScheme, .light)
-        .previewDisplayName("Light Mode")
-        
-        Divider().background(Color.red)
-        
-        // Dark mode
-        NavigationStack {
-            ChatView(user: chatPartner)
-        }
-        .environment(\.colorScheme, .dark)
-        .previewDisplayName("Dark Mode")
-    }
-    .modelContainer(container)
-}
-
