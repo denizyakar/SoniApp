@@ -6,6 +6,11 @@
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
 
 \f0\fs30 \cf0 Bu app'in server'\uc0\u305  cloudflared kullan\u305 yor. Sabit bir domaini var senin de bildi\u287 in \'fczere.\
+Ad\uc0\u305 mlar\u305  yaparken, karar verme a\u351 amas\u305 nda hangi ad\u305 m\u305  yapal\u305 m dediysem o ad\u305 m\u305 n i\'e7inde sana sordu\u287 um sorular\u305  cevapla \'f6yle ilerleyelim.\
+Bu de\uc0\u287 i\u351 ikliklerin sa\u287 l\u305 kl\u305  bir \u351 ekilde yap\u305 lmas\u305  i\'e7in node.js backend'de de de\u287 i\u351 iklik-eklemeler yapmam\u305 z gerekecek, sana o dosyalar\u305  tek tek atamayaca\u287 \u305 m ve t\'fcm i\'e7eriklerini g\'f6steremeyece\u287 im i\'e7in\
+nas\uc0\u305 l ilerlememiz gerekti\u287 i konusunda yard\u305 mc\u305  olman\u305  istiyorum, zaten iki tarafta da kullan\u305 lan fonksiyon isimleri ya da backend'e yollanan de\u287 i\u351 ken isimleri belli olaca\u287 \u305  i\'e7in, \'e7ok sorun ya\u351 ayaca\u287 \u305 m\u305 z\u305 \
+sanm\uc0\u305 yorum. sadece \u351 unu bil: backend ile ilgili kodlar\u305 n hepsi server.js dosyas\u305 nda yaz\u305 l\u305 .\
+Bilmen gereken \uc0\u351 eyler olursa bana sor, \'f6yle devam edelim.\
 \
 1:\
 Notification ve alert iyile\uc0\u351 tirmesi:\
@@ -14,6 +19,9 @@ Olmas\uc0\u305  gereken: ChatListView'dayken Push Notification gelmemeli, onun y
 chatlistview'da g\'f6r\'fcnen(isminin oldu\uc0\u287 u box'\u305 n) kutusunda, k\u305 rm\u305 z\u305  bir nokta gibi(unread message), okunmayan bir mesaj oldu\u287 unu g\'f6steren bir g\'f6r\'fcn\'fc\u351  olmal\u305 . Ve bir sound oynamal\u305 (ayn\u305  whatsapp'taki gibi).\
 \
 PushNotification sadece kullan\uc0\u305 c\u305  ba\u351 ka bir chat'in i\'e7indeyse, uygulama minimize haldeyse, ya da kapal\u305 ysa(ram'den silindiyse gelmeli).\
+\
+---> Chatlist'teyken k\uc0\u305 rm\u305 z\u305  dot gelecek. Ama uygulama kapal\u305 -minimize haldeyken de \'e7al\u305 \u351 mas\u305  i\'e7in serverdan bir unread count endpointi yok, gelecek.\
+---> Sorunsuz \'e7al\uc0\u305 \u351 \u305 yor.\
 \
 2:\
 Mesaj yenilikleri:\
@@ -24,6 +32,9 @@ e\uc0\u287 er mesaj \'f6nceki g\'fcnlerde yolland\u305 ysa, ayn\u305  whatsapp't
 Bunu nas\uc0\u305 l yapaca\u287 \u305 n\u305  sana b\u305 rak\u305 yorum. \u304 stersen yukar\u305  do\u287 ru mesajlarda kayd\u305 r\u305 rken bir popup \u351 eklinde yaz\u305 p \
 gidecek \uc0\u351 ekilde yap, istersen bir g\'fcnde mesaj at\u305 ld\u305 ysa o mesaj\u305 n \'fcst\'fcnden itibaren \'f6rnek: Feb 16th yazs\u305 n, ba\u351 ka bir g\'fcn yazd\u305 \u287 \u305 nda ona g\'f6re yazs\u305 n. Bu tam olarak nas\u305 l bir mant\u305 kla yap\u305 l\u305 r, nas\u305 l d\'fcnki mesaj Feb 15th'den Yesterday'e d\'f6n\'fc\u351 \'fcr onun mant\u305 \u287 \u305 n\u305  pek kuramad\u305 m kafamda.\
 \
+---> Mesajlara date gelecek, ama hovering g\'fcn-tarih ba\uc0\u351 l\u305 \u287 \u305  gelecek mi emin de\u287 ilim.\
+---> Yap\uc0\u305 ld\u305 , sorunsuz.\
+\
 2.2:\
 Mesajlara okundu \'f6zelli\uc0\u287 i:\
 Sen demi\uc0\u351 tin ki: mesajlar\u305  y\'fcklerken toplu bir \u351 ekilde de\u287 il, yukar\u305  do\u287 ru kayd\u305 rd\u305 k\'e7a(e\u287 er view'a s\u305 \u287 mayacak kadar ge\'e7mi\u351  mesajlar varsa) chunk halinde indirerek g\'f6stermeliyiz. Onu yapt\u305 k m\u305  yapmad\u305 k m\u305  bilmiyorum,\
@@ -31,13 +42,20 @@ yapmad\uc0\u305 ysak yapal\u305 m.\
 Ayr\uc0\u305 ca: Bir mesaj\u305 n okundu olmas\u305  o mesaj\u305 n at\u305 ld\u305 \u287 \u305  ChatView'un a\'e7\u305 l\u305 p a\'e7\u305 lmamas\u305  gibi basit bir kontrolle yeterli mi? Yoksa o belli mesaj\u305 n UI'da load'lan\u305 p loadlanmamas\u305 na g\'f6re mi yap\u305 l\u305 yor?\
 Do\uc0\u287 rusu hangisiyse \'f6yle yapal\u305 m.\
 \
+---> mesajlar\uc0\u305  chunk halinde y\'fckleme(pagination) \u351 uanda GELMEYECEK. ChatView a\'e7\u305 ld\u305 \u287 \u305 nda okundu kontrolu yap\u305 lacak.\
+---> Okundu kontrol\'fc sorunsuz \'e7al\uc0\u305 \u351 \u305 yor. \
+\
 2.3:\
 Mesajlarda isim g\'f6r\'fcnmesi:\
 Mesaj'\uc0\u305  atan ki\u351 inin chat'inde en \'fcstte navigation bar title olarak g\'f6rebilsek de ismini, mesaj\u305 n \'fcst\'fcnde kullan\u305 c\u305 n\u305 n 5. ad\u305 mda kullan\u305 c\u305  men\'fcs\'fcnden se\'e7ece\u287 i nickname'ini g\'f6stersin. Bu nickname default olarak kullan\u305 c\u305 n\u305 n user name'idir.\
 \
+---> Kullan\uc0\u305 c\u305  profili yap\u305 ld\u305 \u287 \u305 nda i\u351 leme koyulacak.\
+\
 2.4:\
 Mesajlara g\'f6nderildi \'f6zelli\uc0\u287 i:\
 Yollanan mesajlar \uc0\u351 uanda server ba\u287 lant\u305 s\u305  kurulamad\u305 ysa ya da internet eri\u351 imi yoksa direkt g\'f6nderilmiyor, hem de UI'da g\'f6r\'fcnm\'fcyor. \'c7ok iyi yenilikler-refactor'ler yapt\u305 k uygulama i\'e7in ama \u351 uanda g\'f6nderilen mesaj\u305 , server'a ba\u287 lan\u305 p gitmediyse bile arka planda await gibi bekletip ba\u287 lant\u305  kuruldu\u287 unda gidebilecek hale getirdik mi? Getirmediysek getirelim. Esnek bir yap\u305  elde edelim.\
+\
+---> Yap\uc0\u305 ld\u305 , server kapal\u305  olsa da internet eri\u351 imi olmasa da, internet+server eri\u351 imi sa\u287 land\u305 \u287 \u305 nda mesaj g\'f6nderiliyor.\
 \
 2.5:\
 Mesaj yenilikleri:\
@@ -46,6 +64,9 @@ Delete dersek, Delete from me ve Delete from everyone se\'e7enekleri olacak.\
 Delete from me: sadece kullan\uc0\u305 c\u305 n\u305 n kendi haf\u305 zas\u305 ndan silinecek(san\u305 r\u305 m swiftdata'dan, do\u287 ru mu?)\
 Delete from everyone: hem veritaban\uc0\u305 ndan, hem kullan\u305 c\u305 n\u305 n datas\u305 ndan ve ekran\u305 ndan, hem de di\u287 er kullan\u305 c\u305 lar\u305 n datas\u305 ndan(?) silinecek. *UYARI*: E\u287 er delete from everyone(ayn\u305  whatsapp'taki gibi) implement edilmesi zor ve fazla kar\u305 \u351 \u305 k bir i\u351 lemse, \'e7\'fcnk\'fc di\u287 er cihazlardan nas\u305 l silinecek? Veya gereksiz u\u287 ra\u351 t\u305 racaksa, sonraya b\u305 rak\u305 lmal\u305 . Delete from me \'f6zelli\u287 i \u351 imdilik yeterli olacakt\u305 r.\
 Info butonu: delete butonunun yan\uc0\u305 nda bulunacak olan info butonu: t\u305 kland\u305 \u287 \u305 nda t\'fcm ekran\u305  kaplayan farkl\u305  bir view ya da card - pop-up gibi bir ekrana g\'f6t\'fcrecek(hangisinin en mant\u305 kl\u305  oldu\u287 una g\'f6re sen se\'e7.), bu ekranda mesaj\u305 n kendisi, g\'f6nderilme tarihi, okunma tarihi, e\u287 er g\'f6nderilemediyse ya da okunmad\u305 ysa ona g\'f6re(ayn\u305  whatsapp'taki gibi) bir ekran olacak.\
+\
+---> delete from everyone d\uc0\u305 \u351 \u305 nda yap\u305 lacak (delete from me, info ekran\u305 )\
+---> Sorunsuz \'e7al\uc0\u305 \u351 \u305 yor, delete from everyone yap\u305 lmayacak.\
 \
 \
 3:\
@@ -60,12 +81,14 @@ Bu avatar default olarak \uc0\u351 uanda kullan\u305 lan avatarName(yanl\u305 \u
 4: Grup Chat \'d6zelli\uc0\u287 i:\
 Kullan\uc0\u305 c\u305  men\'fcs\'fcn\'fc a\'e7ma butonunun yan\u305 na bir yere bir buton ekleyece\u287 iz. Bu butona t\u305 klad\u305 \u287 \u305 m\u305 zda, bize gruba eklemek istedi\u287 imiz kullan\u305 c\u305 lar\u305  g\'f6steren bir pop-up ekran\u305  a\'e7\u305 lacak. Oradan se\'e7ti\u287 imiz kullan\u305 c\u305 lar\u305  ve gruba vermek istedi\u287 imiz ismi se\'e7ece\u287 iz. Gruba koymak istedi\u287 imiz foto\u287 raf\u305  da se\'e7ece\u287 iz. E\u287 er Grup ismi ve foto\u287 raf bo\u351  b\u305 rak\u305 l\u305 rsa, default olarak system image'lar\u305 ndan akl\u305 na gelen uygun bir image'\u305  se\'e7ebilirsin.\
 Grup ismine ise default olarak se\'e7ilen, grupta bulunan ki\uc0\u351 ilerin id(ya da hali haz\u305 rda bir nickname se\'e7tilerse) nickname'lerini s\u305 rayla (\'f6rnek: Grup: Mehmet,Ahmet, Fatih... ve +3 ki\u351 i) gibi bir text mant\u305 \u287 \u305 yla yapabilirsin.\
-\
+\'df\
 Grup chatinde sadece 1 sender 1 receiver olmayaca\uc0\u287 \u305  i\'e7in o mant\u305 \u287 \u305  sa\u287 lam bir \u351 ekilde kurmal\u305 y\u305 z. \
 \
-5:\
+5: Foto\uc0\u287 raf yollama \'f6zelli\u287 i:\
+Chat \'fczerinden foto\uc0\u287 raf yollayabilmeliyiz. Mesaj'\u305  yollad\u305 \u287 \u305 m\u305 z textfield'\u305 n yan\u305 na bir yere bir attachment sembol\'fc i\'e7eren buton koyup, foto\u287 raf se\'e7ip chat \'fczerinden yollayabilmeliyiz.\
+Bunu verimli bir \uc0\u351 ekilde yapmak i\'e7in compress etmeli, kar\u351 \u305 daki ki\u351 i indirmek isterse indirmeli.\
 \
-\
+-- deeplink ba\uc0\u351 ka chatteyken pn'a t\u305 klay\u305 nca chat'e g\'f6t\'fcrm\'fcyor, minimize veya killed iken g\'f6t\'fcr\'fcyor.\
 \
 \
 \

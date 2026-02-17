@@ -35,13 +35,28 @@ class MessageItem {
     var senderId: String
     var receiverId: String
     var date: Date
+    var senderName: String
+    var isRead: Bool
+    var readAt: Date?
+    var statusRaw: String  // MessageStatus raw value — SwiftData enum desteği sınırlı
     
-    init(id: String, text: String, senderId: String, receiverId: String, date: Date) {
+    /// Type-safe status erişimi
+    @Transient
+    var status: MessageStatus {
+        get { MessageStatus(rawValue: statusRaw) ?? .sent }
+        set { statusRaw = newValue.rawValue }
+    }
+    
+    init(id: String, text: String, senderId: String, receiverId: String, date: Date, senderName: String = "", isRead: Bool = false, readAt: Date? = nil, status: MessageStatus = .sent) {
         self.id = id
         self.text = text
         self.senderId = senderId
         self.receiverId = receiverId
         self.date = date
+        self.senderName = senderName
+        self.isRead = isRead
+        self.readAt = readAt
+        self.statusRaw = status.rawValue
     }
     
     /// Mesajın mevcut kullanıcıya ait olup olmadığını kontrol eder.

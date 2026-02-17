@@ -26,6 +26,10 @@ struct Message: Identifiable, Codable {
     let senderId: String
     let receiverId: String
     let date: String?
+    let senderName: String?
+    let isRead: Bool?
+    let readAt: String?
+    let clientId: String?  // Lokal pending mesajı eşleştirmek için
     
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -33,5 +37,9 @@ struct Message: Identifiable, Codable {
         case senderId
         case receiverId
         case date
+        case senderName
+        case isRead
+        case readAt
+        case clientId
     }
 }

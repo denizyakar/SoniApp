@@ -76,8 +76,38 @@ final class DependencyContainer: ObservableObject {
             .receive(on: DispatchQueue.main)
             .assign(to: &$isAuthenticated)
         
+        // SessionStore'un HER değişikliğini (unreadCounts dahil) container'a forward et.
+        // Bu sayede ChatListView, sessionStore.unreadCounts değiştiğinde re-render olur.
+        // Nested ObservableObject problemi: SwiftUI sadece container'ın @Published'larını izler,
+        // sessionStore'un değişikliklerini görmez — bu forward bunu çözer.
+        sessionStore.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
         // Socket bağlantısını başlat
         self.chatService.connect()
+        
+        // Uygulama yeniden açıldığında push token'ı server'a gönder
+        // (Kullanıcı zaten login'se — token APNs'den gelmiş olabilir)
+        sendPushTokenOnStartupIfNeeded()
+    }
+    
+    /// App restart sonrası push token'ı server'a gönder.
+    /// Login sırasında da gönderilir ama app kill+restart senaryosunda
+    /// bu metod catch-all görevi görür.
+    private func sendPushTokenOnStartupIfNeeded() {
+        guard let token = sessionStore.deviceToken,
+              let username = sessionStore.currentUsername,
+              sessionStore.isAuthenticated else { return }
+        
+        pushNotificationService.saveDeviceToken(username: username, token: token) { success in
+            if success {
+                print("✅ Push token sent on app startup")
+            }
+        }
     }
     
     // MARK: - Factory Methods

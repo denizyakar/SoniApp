@@ -11,7 +11,7 @@ import Foundation
 /// Tüm backend endpoint'lerini tek bir yerde toplar.
 ///
 /// **Neden var?**
-/// Önceden `"https://soni-app.xyz"` string'i 4 farklı dosyada tekrarlanıyordu:
+/// Önceden `"url"` string'i 4 farklı dosyada tekrarlanıyordu:
 /// - AuthManager.swift
 /// - ChatViewModel.swift
 /// - TokenService.swift (3 kez!)
@@ -21,7 +21,7 @@ import Foundation
 /// Şimdi sadece `baseURL`'i değiştirmen yeterli.
 enum APIEndpoints {
     
-    static let baseURL = "https://soni-app.xyz"
+    static let baseURL = "your_url"
     
     // MARK: - Auth
     static var login: URL {

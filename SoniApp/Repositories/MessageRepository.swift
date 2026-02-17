@@ -92,28 +92,111 @@ final class MessageRepository: MessageRepositoryProtocol {
         try modelContext.save()
     }
     
+    // MARK: - Save MessageItem (for offline queue)
+    
+    /// Doğrudan MessageItem kaydet (pending mesajlar için)
+    func saveItem(_ item: MessageItem) throws {
+        modelContext.insert(item)
+        try modelContext.save()
+    }
+    
+    /// Context'i kaydet (status güncellemeleri için)
+    func save() throws {
+        try modelContext.save()
+    }
+    
+    // MARK: - Pending Messages (offline queue)
+    
+    /// Gönderilmeyi bekleyen (pending/failed) mesajları getir
+    func getPendingMessages(senderId: String) -> [MessageItem] {
+        let pendingRaw = MessageStatus.pending.rawValue
+        let failedRaw = MessageStatus.failed.rawValue
+        
+        let predicate = #Predicate<MessageItem> { item in
+            item.senderId == senderId &&
+            (item.statusRaw == pendingRaw || item.statusRaw == failedRaw)
+        }
+        
+        do {
+            return try modelContext.fetch(FetchDescriptor(predicate: predicate, sortBy: [SortDescriptor(\.date)]))
+        } catch {
+            print("❌ Get pending messages error: \(error.localizedDescription)")
+            return []
+        }
+    }
+    
+    // MARK: - Read Receipts
+    
+    /// Belirtilen mesajları "okundu" olarak işaretle
+    func markAsRead(messageIds: [String]) {
+        let predicate = #Predicate<MessageItem> { item in
+            item.isRead == false
+        }
+        
+        do {
+            let allUnread = try modelContext.fetch(FetchDescriptor(predicate: predicate))
+            let now = Date()
+            
+            for item in allUnread where messageIds.contains(item.id) {
+                item.isRead = true
+                item.readAt = now
+            }
+            
+            try modelContext.save()
+        } catch {
+            print("❌ Mark as read error: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Belirli bir göndericiden bana gelen okunmamış mesaj ID'lerini getir
+    func getUnreadMessageIds(from senderId: String, to receiverId: String) -> [String] {
+        let predicate = #Predicate<MessageItem> { item in
+            item.senderId == senderId &&
+            item.receiverId == receiverId &&
+            item.isRead == false
+        }
+        
+        do {
+            let unread = try modelContext.fetch(FetchDescriptor(predicate: predicate))
+            return unread.map { $0.id }
+        } catch {
+            print("❌ Get unread IDs error: \(error.localizedDescription)")
+            return []
+        }
+    }
+    
+    // MARK: - Delete Message (lokal)
+    
+    /// Mesajı lokal SwiftData'dan sil (Delete from me)
+    func deleteMessage(id: String) throws {
+        let predicate = #Predicate<MessageItem> { item in
+            item.id == id
+        }
+        
+        let items = try modelContext.fetch(FetchDescriptor(predicate: predicate))
+        for item in items {
+            modelContext.delete(item)
+        }
+        try modelContext.save()
+    }
+    
     // MARK: - Private: DTO → Entity Mapping
     
-    /// `Message` (DTO) → `MessageItem` (SwiftData Entity) dönüşümü.
-    ///
-    /// **Eskiden bu kod ChatViewModel.saveMessageToDB() içindeydi.**
-    /// Şimdi tek bir yerde, gizli (encapsulated).
-    /// Yeni bir alan eklersen (ör. `isRead`, `mediaURL`)
-    /// sadece burayı değiştirirsin — ViewModel'e dokunmazsın.
     private func insertMessageItem(from message: Message) {
-        // Statik formatter kullan (Date+ISO8601.swift'ten)
         let date = Date.fromISO8601(message.date ?? "") ?? Date()
+        let readAt = message.readAt.flatMap { Date.fromISO8601($0) }
         
         let newItem = MessageItem(
             id: message.id,
             text: message.text,
             senderId: message.senderId,
             receiverId: message.receiverId,
-            date: date
+            date: date,
+            senderName: message.senderName ?? "",
+            isRead: message.isRead ?? false,
+            readAt: readAt
         )
         
-        // SwiftData @Attribute(.unique) sayesinde aynı ID'li mesaj
-        // varsa üzerine yazar (upsert). Duplicate oluşmaz.
         modelContext.insert(newItem)
     }
 }

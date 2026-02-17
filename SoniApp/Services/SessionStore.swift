@@ -24,6 +24,7 @@ protocol SessionStoreProtocol {
     var authToken: String? { get }
     var deviceToken: String? { get set }
     var currentChatPartnerId: String? { get set }
+    var isInChatList: Bool { get set }
     
     /// Oturum bilgilerini kaydeder (login sonrası çağrılır)
     func saveSession(token: String, userId: String?, username: String?)
@@ -81,11 +82,31 @@ final class SessionStore: SessionStoreProtocol, ObservableObject {
     }
     
     /// Şu anda açık olan chat'in partner ID'si.
-    /// Foreground notification filtreleme için kullanılır (AppDelegate).
-    /// UserDefaults'a da yazılır çünkü AppDelegate SwiftUI DI'a erişemez.
     var currentChatPartnerId: String? {
         didSet {
             UserDefaults.standard.set(currentChatPartnerId, forKey: "currentChatPartnerId")
+        }
+    }
+    
+    /// ChatListView açık mı? Push notification filtreleme için.
+    /// AppDelegate bunu UserDefaults üzerinden okur.
+    var isInChatList: Bool = false {
+        didSet {
+            UserDefaults.standard.set(isInChatList, forKey: "isInChatList")
+        }
+    }
+    
+    /// Push notification'a tıklandığında açılacak chat'in userId'si.
+    /// AppDelegate set eder → SoniAppApp observe edip navigate eder.
+    @Published var deepLinkUserId: String? = nil
+    
+    /// Her kullanıcı için okunmamış mesaj sayısı. (userId → count)
+    /// ChatListView'da kırmızı badge göstermek için kullanılır.
+    /// UserDefaults'ta persist ediliyor — app restart'ta kaybolmaz.
+    @Published var unreadCounts: [String: Int] = [:] {
+        didSet {
+            // Her değişiklikte UserDefaults'a kaydet
+            UserDefaults.standard.set(unreadCounts, forKey: "unreadCounts")
         }
     }
     
@@ -93,6 +114,18 @@ final class SessionStore: SessionStoreProtocol, ObservableObject {
     
     var isAuthenticatedPublisher: AnyPublisher<Bool, Never> {
         $isAuthenticated.eraseToAnyPublisher()
+    }
+    
+    // MARK: - Unread Helpers
+    
+    /// Bir kullanıcıdan gelen okunmamış mesaj sayısını artır.
+    func incrementUnread(for userId: String) {
+        unreadCounts[userId, default: 0] += 1
+    }
+    
+    /// Bir kullanıcının okunmamış mesaj sayısını sıfırla (chat açıldığında).
+    func clearUnread(for userId: String) {
+        unreadCounts[userId] = nil
     }
     
     // MARK: - Init
@@ -107,6 +140,11 @@ final class SessionStore: SessionStoreProtocol, ObservableObject {
         
         // AppDelegate tarafından kaydedilmiş device token'ı yükle
         self.deviceToken = UserDefaults.standard.string(forKey: "deviceToken")
+        
+        // Kaydedilmiş unread count'ları yükle
+        if let saved = UserDefaults.standard.dictionary(forKey: "unreadCounts") as? [String: Int] {
+            self.unreadCounts = saved
+        }
     }
     
     // MARK: - Methods

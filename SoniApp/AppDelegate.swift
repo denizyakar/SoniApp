@@ -50,8 +50,19 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         
         print("📲 Device Token: \(token)")
         
-        // Token'ı UserDefaults'a kaydet — DependencyContainer bunu okuyacak
+        // Token'ı UserDefaults'a kaydet
         UserDefaults.standard.set(token, forKey: "deviceToken")
+        
+        // Hemen server'a gönder (kullanıcı zaten login'se)
+        // Bu, login'den SONRA token callback'i geldiğinde de çalışır.
+        let username = UserDefaults.standard.string(forKey: "username")
+        if let username = username, !username.isEmpty {
+            PushNotificationService().saveDeviceToken(username: username, token: token) { success in
+                if success {
+                    print("✅ Push token sent to server (from AppDelegate)")
+                }
+            }
+        }
     }
     
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
@@ -62,10 +73,18 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         
+        // ChatListView açıkken push gelmesin — in-app sound + badge yeterli
+        let isInChatList = UserDefaults.standard.bool(forKey: "isInChatList")
+        if isInChatList {
+            print("🔕 User is in ChatListView, suppressing push")
+            completionHandler([])
+            return
+        }
+        
         let userInfo = notification.request.content.userInfo
         
         if let senderId = userInfo["senderIdFromPayload"] as? String {
-            // Aktif chat partner kontrolü — UserDefaults üzerinden
+            // Aktif chat partner kontrolü
             let currentPartnerId = UserDefaults.standard.string(forKey: "currentChatPartnerId")
             
             if currentPartnerId == senderId {
@@ -79,6 +98,30 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     }
     
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+        
+        // Push notification'a tıklandı → senderId'yi kaydet
+        // SessionStore bu değeri observe edip ilgili chat'e navigate edecek
+        if let senderId = userInfo["senderIdFromPayload"] as? String {
+            print("🔗 Deeplink: navigating to chat with \(senderId)")
+            UserDefaults.standard.set(senderId, forKey: "deepLinkUserId")
+            
+            // Eğer app zaten açıksa, SessionStore'a bildir
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .pushNotificationTapped,
+                    object: nil,
+                    userInfo: ["senderId": senderId]
+                )
+            }
+        }
+        
         completionHandler()
     }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let pushNotificationTapped = Notification.Name("pushNotificationTapped")
 }

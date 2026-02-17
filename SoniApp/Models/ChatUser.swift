@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ChatUser: Identifiable, Codable {
+struct ChatUser: Identifiable, Codable, Hashable {
     let id: String
     let username: String
     var avatarName: String {

@@ -33,18 +33,26 @@ import Combine
 /// Bu, **Dependency Inversion Principle** (SOLID'in D'si) uygulamasıdır.
 protocol ChatServiceProtocol {
     /// Gelen mesajları dinlemek için Combine publisher.
-    /// ViewModel bunu subscribe eder.
     var messagePublisher: AnyPublisher<Message, Never> { get }
     
     /// Yeni kullanıcı kaydı sinyali
     var userRegisteredPublisher: AnyPublisher<Void, Never> { get }
+    
+    /// Okundu bilgisi geldiğinde: [mesaj ID'leri] yayını
+    var messageReadPublisher: AnyPublisher<[String], Never> { get }
+    
+    /// Bağlantı durumu değişimi (true=connected, false=disconnected)
+    var connectionStatePublisher: AnyPublisher<Bool, Never> { get }
     
     /// Bağlantı durumu
     var isConnected: Bool { get }
     
     func connect()
     func disconnect()
-    func sendMessage(text: String, senderId: String, receiverId: String)
+    func sendMessage(text: String, senderId: String, receiverId: String, clientId: String?)
+    
+    /// Mesajları okundu olarak işaretle
+    func sendReadReceipt(messageIds: [String], readerId: String)
 }
 
 // MARK: - Implementation
@@ -65,11 +73,17 @@ final class SocketChatService: ChatServiceProtocol {
     
     // MARK: - Combine Subjects (iç kullanım)
     
-    /// Gelen mesajları yayan subject. Private: dışarıdan `.send()` çağrılamaz.
+    /// Gelen mesajları yayan subject.
     private let _messageSubject = PassthroughSubject<Message, Never>()
     
     /// Yeni kullanıcı kaydı sinyali
     private let _userRegisteredSubject = PassthroughSubject<Void, Never>()
+    
+    /// Okundu bilgisi sinyali: [mesaj ID'leri]
+    private let _messageReadSubject = PassthroughSubject<[String], Never>()
+    
+    /// Bağlantı durumu sinyali
+    private let _connectionStateSubject = PassthroughSubject<Bool, Never>()
     
     // MARK: - Public Publishers (dışarıya açılan arayüz)
     
@@ -79,6 +93,14 @@ final class SocketChatService: ChatServiceProtocol {
     
     var userRegisteredPublisher: AnyPublisher<Void, Never> {
         _userRegisteredSubject.eraseToAnyPublisher()
+    }
+    
+    var messageReadPublisher: AnyPublisher<[String], Never> {
+        _messageReadSubject.eraseToAnyPublisher()
+    }
+    
+    var connectionStatePublisher: AnyPublisher<Bool, Never> {
+        _connectionStateSubject.eraseToAnyPublisher()
     }
     
     // MARK: - Socket.IO internals
@@ -125,13 +147,26 @@ final class SocketChatService: ChatServiceProtocol {
     ///
     /// **Neden?** Service katmanı, "kim giriş yapmış" bilgisini bilmemeli.
     /// Bu, **Information Hiding** prensibidir. Servis sadece "şu mesajı gönder" der.
-    func sendMessage(text: String, senderId: String, receiverId: String) {
-        let data: [String: Any] = [
+    func sendMessage(text: String, senderId: String, receiverId: String, clientId: String? = nil) {
+        var data: [String: Any] = [
             "text": text,
             "senderId": senderId,
             "receiverId": receiverId
         ]
+        if let clientId = clientId {
+            data["clientId"] = clientId
+        }
         socket.emit("chat_message", data)
+    }
+    
+    /// Mesajları okundu olarak işaretle — server'a gönder
+    func sendReadReceipt(messageIds: [String], readerId: String) {
+        guard !messageIds.isEmpty else { return }
+        let data: [String: Any] = [
+            "messageIds": messageIds,
+            "readerId": readerId
+        ]
+        socket.emit("mark_as_read", data)
     }
     
     // MARK: - Private: Socket Listeners
@@ -141,12 +176,14 @@ final class SocketChatService: ChatServiceProtocol {
         socket.on(clientEvent: .connect) { [weak self] _, _ in
             print("[SocketService] Connected ✅")
             self?.isConnected = true
+            self?._connectionStateSubject.send(true)
         }
         
         // Bağlantı koptu
         socket.on(clientEvent: .disconnect) { [weak self] _, _ in
             print("[SocketService] Disconnected ⚠️")
             self?.isConnected = false
+            self?._connectionStateSubject.send(false)
         }
         
         // Yeni kullanıcı kaydı
@@ -163,13 +200,19 @@ final class SocketChatService: ChatServiceProtocol {
             do {
                 let jsonData = try JSONSerialization.data(withJSONObject: json)
                 let message = try JSONDecoder().decode(Message.self, from: jsonData)
-                
-                // Combine pipeline'ına gönder
                 self?._messageSubject.send(message)
-                
             } catch {
                 print("[SocketService] Message parse error: \(error)")
             }
+        }
+        
+        // Okundu bilgisi alındı
+        socket.on("read_receipt") { [weak self] data, _ in
+            guard let dataArray = data as? [[String: Any]],
+                  let json = dataArray.first,
+                  let messageIds = json["messageIds"] as? [String] else { return }
+            
+            self?._messageReadSubject.send(messageIds)
         }
     }
 }
