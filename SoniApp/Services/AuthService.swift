@@ -77,6 +77,11 @@ final class AuthService {
                 return
             }
             
+            // DEBUG: Server'ın gerçekte ne döndüğünü görelim
+            if let responseStr = String(data: data, encoding: .utf8) {
+                print("🔍 Login response (\(data.count) bytes): \(responseStr.prefix(500))")
+            }
+            
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 completion(.failure(.decodingError(underlying: NSError(domain: "", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON"]))))
                 return
@@ -89,6 +94,17 @@ final class AuthService {
                     userId: json["userId"] as? String,
                     username: json["username"] as? String
                 )
+                
+                // YENİ: Profil Bilgisi ekle (Avatar vb.)
+                if let avatarName = json["avatarName"] as? String {
+                    self.sessionStore.currentAvatarName = avatarName
+                }
+                if let avatarUrl = json["avatarUrl"] as? String {
+                    self.sessionStore.currentAvatarUrl = avatarUrl
+                }
+                if let nickname = json["nickname"] as? String {
+                    self.sessionStore.currentNickname = nickname
+                }
                 
                 // Push notification token'ı gönder
                 self.sendPushTokenIfNeeded()
@@ -153,10 +169,27 @@ final class AuthService {
         var request = URLRequest(url: APIEndpoints.users)
         request.httpMethod = "GET"
         
+        // YENİ: Auth Header ekle (Unread count hesaplamak için gerekli)
+        if let token = sessionStore.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
         session.dataTask(with: request) { data, response, error in
             if let error = error {
+                print("❌ fetchAllUsers Network Error: \(error.localizedDescription)")
                 completion(.failure(.networkError(underlying: error)))
                 return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📦 fetchAllUsers Status Code: \(httpResponse.statusCode)")
+                
+                if let data = data, let str = String(data: data, encoding: .utf8) {
+                    // Sadece hata durumunda veya debug için tüm body'i basalım
+                    if httpResponse.statusCode != 200 {
+                        print("❌ Error Body: \(str)")
+                    }
+                }
             }
             
             guard let data = data else {
@@ -169,6 +202,10 @@ final class AuthService {
                 let filtered = users.filter { $0.id != self.sessionStore.currentUserId }
                 completion(.success(filtered))
             } catch {
+                print("❌ JSON Decode Error: \(error)")
+                if let str = String(data: data, encoding: .utf8) {
+                     print("❌ Raw JSON Payload that failed: \(str)")
+                }
                 completion(.failure(.decodingError(underlying: error)))
             }
         }.resume()

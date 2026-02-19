@@ -13,7 +13,8 @@ import SwiftData
 
 /// Kullanıcı veri operasyonlarının sözleşmesi.
 protocol UserRepositoryProtocol {
-    func syncUsersFromServer(authService: AuthService) async throws
+    @discardableResult
+    func syncUsersFromServer(authService: AuthService, sessionStore: SessionStoreProtocol) async throws -> [ChatUser]
 }
 
 // MARK: - Implementation
@@ -37,8 +38,9 @@ final class UserRepository: UserRepositoryProtocol {
         self.modelContext = modelContext
     }
     
-    /// Sunucudan tüm kullanıcıları çeker ve lokal DB'ye kaydeder.
-    func syncUsersFromServer(authService: AuthService) async throws {
+    /// Sunucudan tüm kullanıcıları çeker, lokal DB'ye kaydeder ve unread count'ları günceller.
+    @discardableResult
+    func syncUsersFromServer(authService: AuthService, sessionStore: SessionStoreProtocol) async throws -> [ChatUser] {
         // Callback-based API'yi async/await'e çeviriyoruz (bridge)
         let users: [ChatUser] = try await withCheckedThrowingContinuation { continuation in
             authService.fetchAllUsers { result in
@@ -56,11 +58,41 @@ final class UserRepository: UserRepositoryProtocol {
             let userItem = UserItem(
                 id: user.id,
                 username: user.username,
-                avatarName: user.avatarName
+                avatarName: user.avatar,
+                nickname: user.nickname ?? "",
+                avatarUrl: user.avatarUrl ?? ""
             )
             modelContext.insert(userItem)
+            
+            // YENİ: Backend'den gelen okunmamış mesaj sayısını SessionStore'a yaz
+            if let unreadCount = user.unreadCount {
+                sessionStore.unreadCounts[user.id] = unreadCount
+            }
         }
         
         try modelContext.save()
+        
+        return users
+    }
+    
+    /// Kullanıcı profilini güncelle (real-time socket event'ten)
+    func updateUserProfile(userId: String, nickname: String, avatarName: String, avatarUrl: String = "") throws {
+        let predicate = #Predicate<UserItem> { item in
+            item.id == userId
+        }
+        
+        let items = try modelContext.fetch(FetchDescriptor(predicate: predicate))
+        if let userItem = items.first {
+            userItem.nickname = nickname
+            userItem.avatarName = avatarName
+            if !avatarUrl.isEmpty {
+                // Cache-buster: URL değişmiş gibi göstermek için timestamp ekle
+                // Böylece AsyncImage eski fotoğrafı kullanmaz, yenisini indirir.
+                let separator = avatarUrl.contains("?") ? "&" : "?"
+                let timestamp = Date().timeIntervalSince1970
+                userItem.avatarUrl = "\(avatarUrl)\(separator)t=\(timestamp)"
+            }
+            try modelContext.save()
+        }
     }
 }

@@ -44,12 +44,18 @@ protocol ChatServiceProtocol {
     /// Bağlantı durumu değişimi (true=connected, false=disconnected)
     var connectionStatePublisher: AnyPublisher<Bool, Never> { get }
     
+    /// Profil güncellemesi: (userId, nickname, avatarName, avatarUrl)
+    var profileUpdatedPublisher: AnyPublisher<(String, String, String, String), Never> { get }
+    
     /// Bağlantı durumu
     var isConnected: Bool { get }
     
     func connect()
     func disconnect()
-    func sendMessage(text: String, senderId: String, receiverId: String, clientId: String?)
+    func sendMessage(text: String, senderId: String, receiverId: String, clientId: String?, imageUrl: String?)
+    
+    /// Fotoğraf yükle ve URL döndür
+    func uploadMessageImage(_ data: Data) async throws -> String
     
     /// Mesajları okundu olarak işaretle
     func sendReadReceipt(messageIds: [String], readerId: String)
@@ -85,6 +91,9 @@ final class SocketChatService: ChatServiceProtocol {
     /// Bağlantı durumu sinyali
     private let _connectionStateSubject = PassthroughSubject<Bool, Never>()
     
+    /// Profil güncellemesi sinyali: (userId, nickname, avatarName, avatarUrl)
+    private let _profileUpdatedSubject = PassthroughSubject<(String, String, String, String), Never>()
+    
     // MARK: - Public Publishers (dışarıya açılan arayüz)
     
     var messagePublisher: AnyPublisher<Message, Never> {
@@ -101,6 +110,10 @@ final class SocketChatService: ChatServiceProtocol {
     
     var connectionStatePublisher: AnyPublisher<Bool, Never> {
         _connectionStateSubject.eraseToAnyPublisher()
+    }
+    
+    var profileUpdatedPublisher: AnyPublisher<(String, String, String, String), Never> {
+        _profileUpdatedSubject.eraseToAnyPublisher()
     }
     
     // MARK: - Socket.IO internals
@@ -147,7 +160,7 @@ final class SocketChatService: ChatServiceProtocol {
     ///
     /// **Neden?** Service katmanı, "kim giriş yapmış" bilgisini bilmemeli.
     /// Bu, **Information Hiding** prensibidir. Servis sadece "şu mesajı gönder" der.
-    func sendMessage(text: String, senderId: String, receiverId: String, clientId: String? = nil) {
+    func sendMessage(text: String, senderId: String, receiverId: String, clientId: String? = nil, imageUrl: String? = nil) {
         var data: [String: Any] = [
             "text": text,
             "senderId": senderId,
@@ -156,8 +169,46 @@ final class SocketChatService: ChatServiceProtocol {
         if let clientId = clientId {
             data["clientId"] = clientId
         }
+        if let imageUrl = imageUrl {
+            data["imageUrl"] = imageUrl
+        }
         socket.emit("chat_message", data)
     }
+    
+    /// Mesaj görseli yükle
+    func uploadMessageImage(_ data: Data) async throws -> String {
+        let url = URL(string: "\(APIEndpoints.baseURL)/messages/upload")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"message_image.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(data)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        
+        request.httpBody = body
+        
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw PROrror(message: "Upload failed")
+        }
+        
+        struct UploadResponse: Decodable {
+            let imageUrl: String
+        }
+        
+        let result = try JSONDecoder().decode(UploadResponse.self, from: responseData)
+        return result.imageUrl
+    }
+    
+    struct PROrror: Error { let message: String }
     
     /// Mesajları okundu olarak işaretle — server'a gönder
     func sendReadReceipt(messageIds: [String], readerId: String) {
@@ -167,6 +218,17 @@ final class SocketChatService: ChatServiceProtocol {
             "readerId": readerId
         ]
         socket.emit("mark_as_read", data)
+    }
+    
+    /// Profil güncellemesini tüm bağlı client'lara broadcast et
+    func emitProfileUpdate(userId: String, nickname: String, avatarName: String, avatarUrl: String) {
+        let data: [String: Any] = [
+            "userId": userId,
+            "nickname": nickname,
+            "avatarName": avatarName,
+            "avatarUrl": avatarUrl
+        ]
+        socket.emit("profile_updated", data)
     }
     
     // MARK: - Private: Socket Listeners
@@ -213,6 +275,20 @@ final class SocketChatService: ChatServiceProtocol {
                   let messageIds = json["messageIds"] as? [String] else { return }
             
             self?._messageReadSubject.send(messageIds)
+        }
+        
+        // Profil güncellemesi alındı
+        socket.on("profile_updated") { [weak self] data, _ in
+            guard let dataArray = data as? [[String: Any]],
+                  let json = dataArray.first,
+                  let userId = json["userId"] as? String,
+                  let nickname = json["nickname"] as? String,
+                  let avatarName = json["avatarName"] as? String else { return }
+            
+            let avatarUrl = json["avatarUrl"] as? String ?? ""
+            
+            print("[SocketService] Profile updated for user: \(userId)")
+            self?._profileUpdatedSubject.send((userId, nickname, avatarName, avatarUrl))
         }
     }
 }

@@ -2,7 +2,7 @@
 //  ChatListView.swift
 //  SoniApp
 //
-//  DEĞİŞTİRİLDİ: Unread badge + isInChatList flag + notification ses + deeplink.
+//  DEĞİŞTİRİLDİ: Unread badge + isInChatList + deeplink + profile menü.
 //
 
 import SwiftUI
@@ -14,29 +14,29 @@ struct ChatListView: View {
     @StateObject private var viewModel = ChatListViewModel()
     @Environment(\.scenePhase) private var scenePhase
     
-    @Query private var users: [UserItem]
+    // SWIFT DATA İPTAL (Geçici olarak doğrudan ViewModel'den veri alıyoruz)
+    // @Query private var users: [UserItem]
     @Environment(\.modelContext) private var context
     
     /// Programmatic navigation için — deeplink bunu kullanır
     @State private var navigationPath = NavigationPath()
+    @State private var showingProfile = false
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            List(users.filter { $0.id != container.sessionStore.currentUserId }) { user in
+            // viewModel.filteredUsers kullanıyoruz (Search ve filtreleme zaten ViewModel'de)
+            List(viewModel.filteredUsers) { user in
                 
-                let chatUserStruct = ChatUser(id: user.id, username: user.username)
+                // ChatUser struct zaten elimizde, tekrar oluşturmaya gerek yok
+                let chatUserStruct = user
                 
                 NavigationLink(value: chatUserStruct) {
                     HStack {
-                        Image(systemName: user.avatarName)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 48, height: 48)
+                        AvatarView(chatUser: chatUserStruct, size: 48)
                             .padding(.trailing, 8)
-                            .foregroundColor(.blue)
                         
                         VStack(alignment: .leading) {
-                            Text(user.username)
+                            Text(user.displayName)
                                 .font(.headline)
                             
                             Text("Click to start chatting")
@@ -71,6 +71,21 @@ struct ChatListView: View {
                     }
                     .foregroundColor(.red)
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showingProfile = true
+                    } label: {
+                        AvatarView(
+                            imageUrl: URL(string: "\(APIEndpoints.baseURL)\(container.sessionStore.currentAvatarUrl ?? "")"),
+                            sfSymbol: container.sessionStore.currentAvatarName ?? "person.circle",
+                            size: 28
+                        )
+                    }
+                }
+            }
+            .sheet(isPresented: $showingProfile) {
+                UserProfileView()
+                    .environmentObject(container)
             }
             .onAppear {
                 // ChatListView açıldığını bildir (push bastırmak için)
@@ -83,18 +98,25 @@ struct ChatListView: View {
                     sessionStore: container.sessionStore
                 )
                 
+                // App-wide retry servisini başlat (ModelContext burada mevcut)
+                container.retryService.setup(modelContext: context)
+                
                 // App kapalıyken push'a tıklandıysa → UserDefaults'ta deeplink var mı?
                 checkPendingDeepLink()
             }
             .onDisappear {
                 container.sessionStore.isInChatList = false
             }
-            .onChange(of: scenePhase) { newPhase in
+            .onChange(of: scenePhase) { _, newPhase in
                 if newPhase == .background || newPhase == .inactive {
                     container.sessionStore.isInChatList = false
                 } else if newPhase == .active {
                     container.sessionStore.isInChatList = true
-                    // scenePhase'te deeplink kontrolü YAPMA — onAppear zaten yapıyor
+                    // App geri geldiğinde pending mesajları kontrol et
+                    container.retryService.retryAllPendingMessages()
+                    
+                    // Unread Count'ları güncelle (Background'dan gelince otomatik sync)
+                    viewModel.refreshUsers()
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .pushNotificationTapped)) { notification in
@@ -127,9 +149,8 @@ struct ChatListView: View {
         // Zaten navigate ediyorsak tekrar etme
         guard navigationPath.isEmpty else { return }
         
-        // Users listesinde bu kullanıcıyı bul
-        if let userItem = users.first(where: { $0.id == userId }) {
-            let chatUser = ChatUser(id: userItem.id, username: userItem.username)
+        // Users listesinde bu kullanıcıyı bul (ViewModel'den)
+        if let chatUser = viewModel.users.first(where: { $0.id == userId }) {
             navigationPath.append(chatUser)
         }
     }

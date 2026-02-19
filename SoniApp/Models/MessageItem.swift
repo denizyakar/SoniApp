@@ -39,6 +39,7 @@ class MessageItem {
     var isRead: Bool
     var readAt: Date?
     var statusRaw: String  // MessageStatus raw value — SwiftData enum desteği sınırlı
+    var imageUrl: String? // YENİ: Mesaj görseli
     
     /// Type-safe status erişimi
     @Transient
@@ -47,7 +48,7 @@ class MessageItem {
         set { statusRaw = newValue.rawValue }
     }
     
-    init(id: String, text: String, senderId: String, receiverId: String, date: Date, senderName: String = "", isRead: Bool = false, readAt: Date? = nil, status: MessageStatus = .sent) {
+    init(id: String, text: String, senderId: String, receiverId: String, date: Date, senderName: String = "", isRead: Bool = false, readAt: Date? = nil, status: MessageStatus = .sent, imageUrl: String? = nil) {
         self.id = id
         self.text = text
         self.senderId = senderId
@@ -57,6 +58,7 @@ class MessageItem {
         self.isRead = isRead
         self.readAt = readAt
         self.statusRaw = status.rawValue
+        self.imageUrl = imageUrl
     }
     
     /// Mesajın mevcut kullanıcıya ait olup olmadığını kontrol eder.

@@ -31,12 +31,29 @@ class ChatListViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var isSetUp = false  // ← Duplicate setup önleme
     
+    // MARK: - Properties
+    @Published var users: [ChatUser] = []
+    @Published var searchText: String = ""
+    
+    var filteredUsers: [ChatUser] {
+        if searchText.isEmpty {
+            return users
+        } else {
+            return users.filter {
+                $0.username.localizedCaseInsensitiveContains(searchText) ||
+                ($0.nickname?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+    }
+    
     // MARK: - Setup
     
     func setup(context: ModelContext, authService: AuthService, chatService: SocketChatService, sessionStore: SessionStore) {
         // onAppear her çağrıldığında tekrar subscribe olmayı önle
         guard !isSetUp else { return }
         isSetUp = true
+        
+        print("🚀 ChatListViewModel: setup started")
         
         self.userRepository = UserRepository(modelContext: context)
         self.authService = authService
@@ -58,6 +75,14 @@ class ChatListViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] message in
                 self?.handleIncomingMessage(message)
+            }
+            .store(in: &cancellables)
+        
+        // Profil güncellemesi dinle → UserItem'ı güncelle
+        chatService.profileUpdatedPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] (userId, nickname, avatarName, avatarUrl) in
+                self?.handleProfileUpdate(userId: userId, nickname: nickname, avatarName: avatarName, avatarUrl: avatarUrl)
             }
             .store(in: &cancellables)
     }
@@ -85,14 +110,65 @@ class ChatListViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Profile Update Handler
+    
+    /// Başka bir kullanıcı profilini güncellediğinde,
+    /// lokal SwiftData'daki UserItem'ı güncelle ve self.users listesini yenile.
+    private func handleProfileUpdate(userId: String, nickname: String, avatarName: String, avatarUrl: String) {
+        do {
+            // 1. SwiftData Güncelle (Kalıcılık için)
+            try userRepository?.updateUserProfile(userId: userId, nickname: nickname, avatarName: avatarName, avatarUrl: avatarUrl)
+            
+            // 2. UI Güncelle (Anlık görüntüleme için)
+            if let index = users.firstIndex(where: { $0.id == userId }) {
+                // Struct olduğu için kopyasını oluşturup güncellememiz lazım
+                var updatedUser = users[index]
+                // ChatUser struct'ında bu alanlar let olabilir, o zaman struct'ı yeniden oluşturun
+                let newUser = ChatUser(
+                    id: updatedUser.id,
+                    username: updatedUser.username,
+                    nickname: nickname,
+                    avatarName: avatarName,
+                    avatarUrl: avatarUrl,
+                    unreadCount: updatedUser.unreadCount
+                )
+                users[index] = newUser
+            }
+            
+            print("✅ Profile updated for \(userId): nickname=\(nickname), avatar=\(avatarName), url=\(avatarUrl)")
+        } catch {
+            print("❌ Profile update error: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Sync Users
     
+    // Uygulama background'dan geldiğinde de çalışsın diye public yaptık
+    func refreshUsers() {
+        print("🔄 ChatListViewModel: refreshUsers (scenePhase active)")
+        syncUsers()
+    }
+    
     private func syncUsers() {
-        guard let authService = authService else { return }
+        print("📨 ChatListViewModel: syncUsers called...")
+        guard let authService = authService,
+              let sessionStore = sessionStore else {
+            print("⚠️ ChatListViewModel: Dependencies missing for syncUsers")
+            return
+        }
         
         Task {
             do {
-                try await userRepository?.syncUsersFromServer(authService: authService)
+                print("⏳ ChatListViewModel: Requesting syncUsersFromServer...")
+                let fetchedUsers = try await userRepository?.syncUsersFromServer(authService: authService, sessionStore: sessionStore)
+                
+                // UI Güncelleme (Main Actor -> self.users)
+                if let fetchedUsers = fetchedUsers {
+                    self.users = fetchedUsers
+                    print("✅ ChatListViewModel: Updated UI with \(fetchedUsers.count) users")
+                }
+                
+                print("✅ ChatListViewModel: syncUsersFromServer DONE")
             } catch {
                 print("❌ User sync error: \(error.localizedDescription)")
             }

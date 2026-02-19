@@ -55,6 +55,9 @@ final class DependencyContainer: ObservableObject {
     /// Socket.io chat servisi
     let chatService: SocketChatService
     
+    /// App-wide pending mesaj retry servisi
+    let retryService: PendingMessageRetryService
+    
     // MARK: - Private
     private var cancellables = Set<AnyCancellable>()
     
@@ -64,6 +67,7 @@ final class DependencyContainer: ObservableObject {
         self.sessionStore = SessionStore()
         self.pushNotificationService = PushNotificationService()
         self.chatService = SocketChatService()
+        self.retryService = PendingMessageRetryService(chatService: chatService, sessionStore: sessionStore)
         
         // Başlangıç değerini senkronize et
         self.isAuthenticated = sessionStore.isAuthenticated

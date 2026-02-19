@@ -180,6 +180,18 @@ final class MessageRepository: MessageRepositoryProtocol {
         try modelContext.save()
     }
     
+    // MARK: - Get Single Message
+    
+    /// Tek bir mesajı ID ile getir
+    func getMessage(byId id: String) throws -> MessageItem? {
+        let predicate = #Predicate<MessageItem> { item in
+            item.id == id
+        }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        let results = try modelContext.fetch(descriptor)
+        return results.first
+    }
+    
     // MARK: - Private: DTO → Entity Mapping
     
     private func insertMessageItem(from message: Message) {
@@ -194,7 +206,8 @@ final class MessageRepository: MessageRepositoryProtocol {
             date: date,
             senderName: message.senderName ?? "",
             isRead: message.isRead ?? false,
-            readAt: readAt
+            readAt: readAt,
+            imageUrl: message.imageUrl // YENİ: Görsel URL'i kaydet
         )
         
         modelContext.insert(newItem)

@@ -6,6 +6,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 /// Mesajlaşma ekranı.
 struct ChatView: View {
@@ -18,6 +19,10 @@ struct ChatView: View {
     
     // Feature 2.5: Info sheet için seçili mesaj
     @State private var selectedMessageForInfo: MessageItem?
+    
+    // Feature 3: Photo Sharing
+    @State private var showImagePicker = false
+    @State private var inputImage: UIImage?
     
     init(user: ChatUser) {
         self.user = user
@@ -49,7 +54,10 @@ struct ChatView: View {
                             
                             MessageBubble(
                                 message: message,
-                                currentUserId: container.sessionStore.currentUserId
+                                currentUserId: container.sessionStore.currentUserId,
+                                senderDisplayName: user.displayName,
+                                senderAvatar: user.avatar,
+                                senderAvatarUrl: user.avatarImageUrl
                             )
                             .contextMenu {
                                 Button(role: .destructive) {
@@ -67,7 +75,7 @@ struct ChatView: View {
                         }
                     }
                 }
-                .onChange(of: messages.count) { _ in
+                .onChange(of: messages.count) { _, _ in
                     if let lastId = messages.last?.id {
                          withAnimation {
                              proxy.scrollTo(lastId, anchor: .bottom)
@@ -86,7 +94,15 @@ struct ChatView: View {
             
             inputArea
         }
-        .navigationTitle(user.username)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 8) {
+                    AvatarView(chatUser: user, size: 28)
+                    Text(user.displayName)
+                        .font(.headline)
+                }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedMessageForInfo) { message in
             MessageInfoView(message: message)
@@ -102,6 +118,9 @@ struct ChatView: View {
             container.sessionStore.currentChatPartnerId = user.id
             container.sessionStore.isInChatList = false  // Chat açıldı, artık ChatList'te değiliz
             container.sessionStore.clearUnread(for: user.id)  // Okunmamış mesaj badge'ini temizle
+            
+            // Pending mesajları tetikle — chat'e girince hemen retry
+            container.retryService.retryAllPendingMessages()
         }
         .onDisappear {
             container.sessionStore.currentChatPartnerId = nil
@@ -124,30 +143,88 @@ struct ChatView: View {
     // MARK: - Input Area
     
     var inputArea: some View {
-        HStack {
-            TextField("Type a message...", text: $viewModel.text)
-                .padding(12)
-                .font(.system(size: 16))
-                .textFieldStyle(.plain)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray), lineWidth: 1)
-                    )
+        VStack(spacing: 0) {
+            // Preview Area (Varsa)
+            if let image = inputImage {
+                HStack {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                        .clipped()
+                        .overlay(
+                            Button(action: {
+                                withAnimation {
+                                    inputImage = nil
+                                }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.gray)
+                                    .background(Color.white)
+                                    .clipShape(Circle())
+                            }
+                            .offset(x: 5, y: -5),
+                            alignment: .topTrailing
+                        )
+                        .padding(4)
+                    
+                    Spacer()
+                }
                 .padding(.horizontal)
-            
-            Button(action: {
-                viewModel.sendMessage()
-            }) {
-                Image(systemName: "paperplane.fill")
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(Color.blue)
-                    .clipShape(Circle())
+                .padding(.bottom, 4)
+                .transition(.opacity) // Fade in/out
             }
-            .padding(.trailing)
-            .disabled(viewModel.text.isEmpty)
+            
+            HStack {
+                // Camera Button
+                Button(action: {
+                    showImagePicker = true
+                }) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(Color(.systemGray))
+                        .padding(.leading, 12)
+                }
+                .sheet(isPresented: $showImagePicker) {
+                    ImagePicker(image: $inputImage)
+                }
+                // .onChange kaldırıldı — artık hemen göndermiyoruz
+                
+                TextField("Type a message...", text: $viewModel.text, axis: .vertical) // axis: .vertical ile çok satırlı destek
+                    .padding(10)
+                    .font(.system(size: 16))
+                    .textFieldStyle(.plain)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color(.systemGray4), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 8)
+                
+                Button(action: {
+                    // Hem resim hem yazı gönder
+                    viewModel.sendMessage(image: inputImage)
+                    // Resmi temizle (yazıyı ViewModel temizliyor)
+                    withAnimation {
+                        inputImage = nil
+                    }
+                }) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 20)) // İkon boyutu
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(Color.blue)
+                        .clipShape(Circle())
+                }
+                .padding(.trailing, 12)
+                // Disable durumu: Hem yazı boş hem resim yoksa disable
+                .disabled(viewModel.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && inputImage == nil)
+                .opacity((viewModel.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && inputImage == nil) ? 0.6 : 1.0)
+            }
+            .padding(.bottom, 8)
         }
-        .padding(.bottom)
+        .background(Color(.systemBackground)) // Klavye arkası
     }
 }
 
@@ -175,9 +252,13 @@ struct DateSeparatorView: View {
 // MARK: - Message Bubble
 
 /// Mesaj baloncuğu — tüm özellikler: saat, isim, read receipt, offline status.
+/// Mesaj baloncuğu — tüm özellikler: saat, isim, avatar, read receipt, offline status.
 struct MessageBubble: View {
     let message: MessageItem
     let currentUserId: String?
+    let senderDisplayName: String  // nickname varsa o, yoksa senderName
+    let senderAvatar: String       // SF Symbol adı
+    let senderAvatarUrl: URL?      // Fotoğraf URL'si (varsa)
     
     private var isFromMe: Bool {
         message.isFromCurrentUser(userId: currentUserId)
@@ -198,23 +279,65 @@ struct MessageBubble: View {
     }
     
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 6) {
             if isFromMe { Spacer() }
+            
+            // Avatar — sadece karşıdan gelen mesajlarda
+            if !isFromMe {
+                AvatarView(
+                    imageUrl: senderAvatarUrl,
+                    sfSymbol: senderAvatar,
+                    size: 28
+                )
+            }
             
             VStack(alignment: isFromMe ? .trailing : .leading, spacing: 2) {
                 // Sender name — sadece karşıdan gelen mesajlarda göster
-                if !isFromMe && !message.senderName.isEmpty {
-                    Text(message.senderName)
+                if !isFromMe && !senderDisplayName.isEmpty {
+                    Text(senderDisplayName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.blue)
                         .padding(.horizontal, 12)
                         .padding(.top, 6)
                 }
                 
-                Text(message.text)
-                    .padding(.horizontal, 12)
-                    .padding(.top, isFromMe || message.senderName.isEmpty ? 8 : 2)
-                    .padding(.bottom, 2)
+                // Mesaj İçeriği: Resim ve/veya Metin
+                VStack(alignment: .leading, spacing: 4) {
+                    // Resim varsa göster
+                    if let imageUrl = message.imageUrl, !imageUrl.isEmpty {
+                        // URL Oluşturma: Local file (pending) veya Remote URL
+                        let url: URL? = {
+                            if imageUrl.hasPrefix("file://") {
+                                return URL(string: imageUrl)
+                            }
+                            return URL(string: "\(APIEndpoints.baseURL)\(imageUrl)")
+                        }()
+                        
+                        AsyncImage(url: url) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            ZStack {
+                                Color.gray.opacity(0.3)
+                                ProgressView()
+                            }
+                        }
+                        .frame(width: 200, height: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.top, 4)
+                        .padding(.horizontal, 4)
+                        // Kendi mesajımsa sağa, onunki sola (gerçi bubble zaten hizalı)
+                    }
+                    
+                    // Metin varsa göster
+                    if !message.text.isEmpty {
+                        Text(message.text)
+                            .padding(.horizontal, 12)
+                            .padding(.top, (message.imageUrl != nil) ? 4 : (isFromMe || senderDisplayName.isEmpty ? 8 : 2))
+                            .padding(.bottom, 2)
+                    }
+                }
                 
                 // Alt satır: Saat + Read/Status durumu
                 HStack(spacing: 4) {
@@ -236,8 +359,8 @@ struct MessageBubble: View {
                             .foregroundColor(isFromMe ? .white.opacity(0.7) : .gray)
                         
                         // "Read, 13:30" — sadece kendi mesajlarımda, okunduysa
-                        if isFromMe && message.isRead, let readAt = message.readAt {
-                            Text("· Read, \(MessageDateFormatter.timeString(from: readAt))")
+                        if isFromMe && message.isRead, message.readAt != nil {
+                            Text("· Read")
                                 .font(.system(size: 11))
                                 .foregroundColor(.white.opacity(0.7))
                         }

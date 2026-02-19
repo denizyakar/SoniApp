@@ -17,10 +17,16 @@ import Combine
 /// Unit test'te gerçek UserDefaults'a dokunmadan mock bir SessionStore
 /// inject edebilmek için. Ayrıca ileride Keychain'e geçmek istersen
 /// sadece yeni bir implementasyon yazarsın — hiçbir ViewModel değişmez.
-protocol SessionStoreProtocol {
+protocol SessionStoreProtocol: AnyObject {
     var isAuthenticated: Bool { get }
     var currentUserId: String? { get }
     var currentUsername: String? { get }
+    
+    // YENİ: Profil Bilgileri (AuthService'in set edebilmesi için { get set })
+    var currentNickname: String? { get set }
+    var currentAvatarName: String? { get set }
+    var currentAvatarUrl: String? { get set }
+    
     var authToken: String? { get }
     var deviceToken: String? { get set }
     var currentChatPartnerId: String? { get set }
@@ -34,6 +40,9 @@ protocol SessionStoreProtocol {
     
     /// Auth durumunu dinlemek için publisher
     var isAuthenticatedPublisher: AnyPublisher<Bool, Never> { get }
+    
+    /// Her kullanıcı için okunmamış mesaj sayısı
+    var unreadCounts: [String: Int] { get set }
 }
 
 // MARK: - Implementation
@@ -59,6 +68,9 @@ final class SessionStore: SessionStoreProtocol, ObservableObject {
         static let authToken = "authToken"
         static let userId = "userId"
         static let username = "username"
+        static let nickname = "nickname"
+        static let avatarName = "avatarName"
+        static let avatarUrl = "avatarUrl"
     }
     
     // MARK: - Published State
@@ -68,6 +80,21 @@ final class SessionStore: SessionStoreProtocol, ObservableObject {
     
     private(set) var currentUserId: String?
     private(set) var currentUsername: String?
+    
+    /// Kullanıcının seçtiği nickname (profil ekranından)
+    var currentNickname: String? {
+        didSet { UserDefaults.standard.set(currentNickname, forKey: Keys.nickname) }
+    }
+    
+    /// Kullanıcının seçtiği avatar (profil ekranından)
+    var currentAvatarName: String? {
+        didSet { UserDefaults.standard.set(currentAvatarName, forKey: Keys.avatarName) }
+    }
+    
+    /// Kullanıcının yüklediği profil fotoğrafı URL'si
+    var currentAvatarUrl: String? {
+        didSet { UserDefaults.standard.set(currentAvatarUrl, forKey: Keys.avatarUrl) }
+    }
     
     var authToken: String? {
         UserDefaults.standard.string(forKey: Keys.authToken)
@@ -145,6 +172,11 @@ final class SessionStore: SessionStoreProtocol, ObservableObject {
         if let saved = UserDefaults.standard.dictionary(forKey: "unreadCounts") as? [String: Int] {
             self.unreadCounts = saved
         }
+        
+        // Profil bilgilerini yükle
+        self.currentNickname = UserDefaults.standard.string(forKey: Keys.nickname)
+        self.currentAvatarName = UserDefaults.standard.string(forKey: Keys.avatarName)
+        self.currentAvatarUrl = UserDefaults.standard.string(forKey: Keys.avatarUrl)
     }
     
     // MARK: - Methods
@@ -171,9 +203,15 @@ final class SessionStore: SessionStoreProtocol, ObservableObject {
         UserDefaults.standard.removeObject(forKey: Keys.authToken)
         UserDefaults.standard.removeObject(forKey: Keys.userId)
         UserDefaults.standard.removeObject(forKey: Keys.username)
+        UserDefaults.standard.removeObject(forKey: Keys.nickname)
+        UserDefaults.standard.removeObject(forKey: Keys.avatarName)
+        UserDefaults.standard.removeObject(forKey: Keys.avatarUrl)
         
         self.currentUserId = nil
         self.currentUsername = nil
+        self.currentNickname = nil
+        self.currentAvatarName = nil
+        self.currentAvatarUrl = nil
         self.isAuthenticated = false
     }
 }
