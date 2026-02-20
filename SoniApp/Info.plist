@@ -6,5 +6,9 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Görüntülü konuşma yapabilmek için kamerana erişmemiz gerekiyor.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sesli ve görüntülü konuşma için mikrofonuna erişmemiz gerekiyor.</string>
 </dict>
 </plist>

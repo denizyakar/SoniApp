@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		E97D19A52F263F6300B43D36 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = E97D19A42F263F6300B43D36 /* SocketIO */; };
+		E98DB4052F48B93700A28C14 /* LiveKitWebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = E98DB4042F48B93700A28C14 /* LiveKitWebRTC */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E98DB4052F48B93700A28C14 /* LiveKitWebRTC in Frameworks */,
 				E97D19A52F263F6300B43D36 /* SocketIO in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -84,6 +86,7 @@
 			name = SoniApp;
 			packageProductDependencies = (
 				E97D19A42F263F6300B43D36 /* SocketIO */,
+				E98DB4042F48B93700A28C14 /* LiveKitWebRTC */,
 			);
 			productName = ChatApp;
 			productReference = E9582F132F24FBA000D1189A /* SoniApp.app */;
@@ -115,6 +118,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				E97D19A32F263F6300B43D36 /* XCRemoteSwiftPackageReference "socket" */,
+				E98DB4032F48B93700A28C14 /* XCRemoteSwiftPackageReference "webrtc-xcframework" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E9582F142F24FBA000D1189A /* Products */;
@@ -370,6 +374,14 @@
 				kind = branch;
 			};
 		};
+		E98DB4032F48B93700A28C14 /* XCRemoteSwiftPackageReference "webrtc-xcframework" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/webrtc-xcframework";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 137.7151.13;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -377,6 +389,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E97D19A32F263F6300B43D36 /* XCRemoteSwiftPackageReference "socket" */;
 			productName = SocketIO;
+		};
+		E98DB4042F48B93700A28C14 /* LiveKitWebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E98DB4032F48B93700A28C14 /* XCRemoteSwiftPackageReference "webrtc-xcframework" */;
+			productName = LiveKitWebRTC;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
