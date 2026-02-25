@@ -2,33 +2,14 @@
 //  PushNotificationService.swift
 //  SoniApp
 //
-//  Push notification token yönetimini izole eden servis.
-//  Eskiden bu logic AuthManager + TokenService arasında dağınıktı.
-//
 
 import Foundation
 
-// MARK: - Protocol
-
-/// Push notification token operasyonlarının sözleşmesi.
 protocol PushNotificationServiceProtocol {
     func saveDeviceToken(username: String, token: String, completion: @escaping (Bool) -> Void)
     func removeDeviceToken(username: String)
 }
 
-// MARK: - Implementation
-
-/// Backend'e push notification token gönderen/silen servis.
-///
-/// **Neden ayrıldı?**
-/// Eskiden `TokenService.shared` vardı ama `AuthManager` de token
-/// yönetimine karışıyordu (`setDeviceToken`, `sendTokenToBackend`).
-/// Bu sınıf, token logic'ini tek bir yerde toplar.
-///
-/// **Neden `static let shared` kaldırıldı?**
-/// Singleton'ı kaldırarak bu servisi DI ile inject ediyoruz.
-/// Böylece unit test'te gerçek network çağrısı yapmadan
-/// mock bir servis geçebiliriz.
 final class PushNotificationService: PushNotificationServiceProtocol {
     
     func saveDeviceToken(username: String, token: String, completion: @escaping (Bool) -> Void) {
@@ -72,9 +53,7 @@ final class PushNotificationService: PushNotificationServiceProtocol {
         let body: [String: Any] = ["username": username]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        // Fire-and-forget: bilerek response beklenmez
-        URLSession.shared.dataTask(with: request) { _, _, _ in
-            print("👋 Remove token request sent")
-        }.resume()
+        // Fire-and-forget
+        URLSession.shared.dataTask(with: request) { _, _, _ in }.resume()
     }
 }

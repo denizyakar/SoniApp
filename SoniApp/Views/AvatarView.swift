@@ -1,18 +1,9 @@
 //
 //  AvatarView.swift
 //  SoniApp
-//
-//  Reusable avatar component: fotoğraf varsa AsyncImage, yoksa SF Symbol.
-//
 
 import SwiftUI
 
-/// Tüm ekranlarda kullanılan avatar gösterim bileşeni.
-///
-/// Öncelik sırası:
-/// 1. `imageUrl` varsa → AsyncImage (sunucudan fotoğraf)
-/// 2. `sfSymbol` varsa → Image(systemName:)
-/// 3. Hiçbiri yoksa → "person.circle" varsayılan
 struct AvatarView: View {
     let imageUrl: URL?
     let sfSymbol: String
@@ -37,7 +28,7 @@ struct AvatarView: View {
                         sfSymbolView
                     case .empty:
                         ProgressView()
-                            .frame(width: size * 0.5, height: size * 0.5) // Loader daha küçük olsun
+                            .frame(width: size * 0.5, height: size * 0.5) // Smaller loader
                     @unknown default:
                         sfSymbolView
                     }
@@ -54,9 +45,9 @@ struct AvatarView: View {
         Image(systemName: sfSymbol)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .foregroundColor(.blue)
-            .padding(4) // SF Symbol biraz padding ister
-            .background(Color.blue.opacity(0.1)) // Arka plan
+            .foregroundColor(AppTheme.white)
+            .padding(4)
+            .background(AppTheme.primaryLight)
             .clipShape(Circle())
     }
 }
@@ -64,7 +55,7 @@ struct AvatarView: View {
 // MARK: - Convenience initializers
 
 extension AvatarView {
-    /// UserItem'dan avatar oluştur
+    /// Create avatar from UserItem
     init(userItem: UserItem, size: CGFloat = 40) {
         self.init(
             imageUrl: userItem.avatarImageUrl,
@@ -73,7 +64,7 @@ extension AvatarView {
         )
     }
     
-    /// ChatUser'dan avatar oluştur
+    /// Create avatar from ChatUser
     init(chatUser: ChatUser, size: CGFloat = 40) {
         self.init(
             imageUrl: chatUser.avatarImageUrl,
@@ -81,4 +72,14 @@ extension AvatarView {
             size: size
         )
     }
+}
+
+#Preview {
+    VStack(spacing: 20) {
+        AvatarView(sfSymbol: "person.circle", size: 60)
+        AvatarView(sfSymbol: "star.circle.fill", size: 48)
+        AvatarView(sfSymbol: "flame.circle", size: 28)
+    }
+    .padding()
+    .background(AppTheme.background)
 }

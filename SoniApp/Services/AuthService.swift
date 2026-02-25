@@ -2,50 +2,28 @@
 //  AuthService.swift
 //  SoniApp
 //
-//  Refactored from AuthManager: SADECE authentication operasyonları.
-//  State yönetimi → SessionStore'a, token yönetimi → PushNotificationService'e taşındı.
-//
 
 import Foundation
 
-/// Authentication servisi — login, register, logout ve user fetch.
-///
-/// **Eskiden AuthManager ne yapıyordu?**
-/// 1. Login / Register (network call)          → ✅ BURADA KALDI
-/// 2. Logout                                   → ✅ BURADA KALDI
-/// 3. Tüm kullanıcıları çekme (fetchAllUsers)  → ✅ BURADA KALDI
-/// 4. Token saklama (UserDefaults)              → ❌ SessionStore'a taşındı
-/// 5. Push notification token                   → ❌ PushNotificationService'e taşındı
-/// 6. User state (currentUserId, username)      → ❌ SessionStore'a taşındı
-/// 7. currentChatPartnerId                      → ❌ SessionStore'a taşındı
-/// 8. URLSession config                         → ❌ Burada kaldı (ama izole)
-///
-/// **Neden `static let shared` kaldırıldı?**
-/// `AuthService` artık DependencyContainer tarafından yaratılıyor.
-/// İhtiyaç duyan her sınıf, init parametresi olarak alıyor.
-/// Bu sayede test'te mock geçebilirsin.
 final class AuthService {
-    
-    // MARK: - Dependencies (inject edilen bağımlılıklar)
     
     private let sessionStore: SessionStoreProtocol
     private let pushService: PushNotificationServiceProtocol
+    private let voipPushService: VoIPPushServiceProtocol
     
-    // MARK: - Network Config
-    
-    /// Proxy'siz URLSession — Türkiye'deki bazı ISP'ler proxy ekleyebiliyor.
-    private var session: URLSession {
+    /// Proxy-free URLSession for Turkey ISP compatibility
+    private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.connectionProxyDictionary = [:]
         config.timeoutIntervalForRequest = 30.0
         return URLSession(configuration: config)
-    }
+    }()
     
     // MARK: - Init
-    
-    init(sessionStore: SessionStoreProtocol, pushNotificationService: PushNotificationServiceProtocol) {
+    init(sessionStore: SessionStoreProtocol, pushNotificationService: PushNotificationServiceProtocol, voipPushService: VoIPPushServiceProtocol) {
         self.sessionStore = sessionStore
         self.pushService = pushNotificationService
+        self.voipPushService = voipPushService
     }
     
     // MARK: - Login
@@ -58,13 +36,6 @@ final class AuthService {
         let body: [String: Any] = ["username": username, "password": password]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
         
-        // ⚠️ [weak self] KULLANMIYORUZ — Neden?
-        // AuthService, View'daki handleAction() içinde `let authService = container.makeAuthService()`
-        // olarak yaratılıyor. Fonksiyon bitince bu lokal değişken ölür.
-        // Eğer [weak self] kullansaydık, network callback döndüğünde self = nil olurdu
-        // ve `guard let self = self else { return }` sessizce çıkardı.
-        // Closure, self'i strong capture ederek AuthService'i callback gelene kadar canlı tutar.
-        // Bu bilerek yapılmıştır — service objesi callback'ten sonra zaten işini tamamlar ve ölür.
         session.dataTask(with: request) { data, response, error in
             
             if let error = error {
@@ -77,7 +48,7 @@ final class AuthService {
                 return
             }
             
-            // DEBUG: Server'ın gerçekte ne döndüğünü görelim
+            // DEBUG: Inspect server response
             if let responseStr = String(data: data, encoding: .utf8) {
                 print("🔍 Login response (\(data.count) bytes): \(responseStr.prefix(500))")
             }
@@ -88,14 +59,12 @@ final class AuthService {
             }
             
             if let token = json["token"] as? String {
-                // Oturumu kaydet
                 self.sessionStore.saveSession(
                     token: token,
                     userId: json["userId"] as? String,
                     username: json["username"] as? String
                 )
                 
-                // YENİ: Profil Bilgisi ekle (Avatar vb.)
                 if let avatarName = json["avatarName"] as? String {
                     self.sessionStore.currentAvatarName = avatarName
                 }
@@ -106,7 +75,11 @@ final class AuthService {
                     self.sessionStore.currentNickname = nickname
                 }
                 
-                // Push notification token'ı gönder
+                // Fetch profile if login response doesn't include avatar info
+                if self.sessionStore.currentAvatarUrl == nil || self.sessionStore.currentAvatarUrl?.isEmpty == true {
+                    self.fetchProfile()
+                }
+                
                 self.sendPushTokenIfNeeded()
                 
                 completion(.success(()))
@@ -154,12 +127,10 @@ final class AuthService {
     // MARK: - Logout
     
     func logout() {
-        // Token'ı backend'den sil
         if let username = sessionStore.currentUsername {
             pushService.removeDeviceToken(username: username)
+            voipPushService.removeVoIPToken(username: username)
         }
-        
-        // Lokal oturumu temizle
         sessionStore.clearSession()
     }
     
@@ -169,7 +140,6 @@ final class AuthService {
         var request = URLRequest(url: APIEndpoints.users)
         request.httpMethod = "GET"
         
-        // YENİ: Auth Header ekle (Unread count hesaplamak için gerekli)
         if let token = sessionStore.authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -181,14 +151,9 @@ final class AuthService {
                 return
             }
             
-            if let httpResponse = response as? HTTPURLResponse {
-                print("📦 fetchAllUsers Status Code: \(httpResponse.statusCode)")
-                
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
                 if let data = data, let str = String(data: data, encoding: .utf8) {
-                    // Sadece hata durumunda veya debug için tüm body'i basalım
-                    if httpResponse.statusCode != 200 {
-                        print("❌ Error Body: \(str)")
-                    }
+                    print("❌ fetchAllUsers Error \(httpResponse.statusCode): \(str)")
                 }
             }
             
@@ -214,13 +179,56 @@ final class AuthService {
     // MARK: - Private Helpers
     
     private func sendPushTokenIfNeeded() {
-        guard let token = sessionStore.deviceToken,
-              let username = sessionStore.currentUsername else { return }
+        // Read fresh from UserDefaults — AppDelegate may have written it after SessionStore init
+        let token = UserDefaults.standard.string(forKey: "deviceToken") ?? sessionStore.deviceToken
+        guard let token = token, !token.isEmpty,
+              let username = sessionStore.currentUsername else {
+            print("⚠️ sendPushTokenIfNeeded: token=\(sessionStore.deviceToken ?? "nil"), username=\(sessionStore.currentUsername ?? "nil")")
+            return
+        }
         
         pushService.saveDeviceToken(username: username, token: token) { success in
             if success {
                 print("✅ Push token sent to backend after login")
+            } else {
+                print("❌ Failed to send push token after login")
             }
         }
+    }
+    
+    /// Fetch user profile after login (when login response doesn't include avatar).
+    private func fetchProfile() {
+        guard let userId = sessionStore.currentUserId else { return }
+        
+        let url = APIEndpoints.updateProfile(userId: userId)
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        if let token = sessionStore.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        session.dataTask(with: request) { data, response, error in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                print("⚠️ fetchProfile: Could not load profile")
+                return
+            }
+            
+            let userDict = json["user"] as? [String: Any] ?? json
+            
+            DispatchQueue.main.async {
+                if let avatarUrl = userDict["avatarUrl"] as? String, !avatarUrl.isEmpty {
+                    self.sessionStore.currentAvatarUrl = avatarUrl
+                    print("✅ Profile loaded: avatarUrl=\(avatarUrl)")
+                }
+                if let avatarName = userDict["avatarName"] as? String, !avatarName.isEmpty {
+                    self.sessionStore.currentAvatarName = avatarName
+                }
+                if let nickname = userDict["nickname"] as? String, !nickname.isEmpty {
+                    self.sessionStore.currentNickname = nickname
+                }
+            }
+        }.resume()
     }
 }

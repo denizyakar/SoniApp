@@ -2,14 +2,6 @@
 //  ChatServiceProtocol.swift
 //  SoniApp
 //
-//  TAMAMEN YENİDEN YAZILDI.
-//
-//  Değişiklikler:
-//  1. getSocket() KALDIRILDI — leaky abstraction düzeltildi
-//  2. Combine Publisher eklendi — ViewModel raw socket'e erişmek zorunda değil
-//  3. Singleton kaldırıldı — DependencyContainer'dan inject ediliyor
-//  4. onMessageReceived callback → Combine publisher'a dönüştürüldü
-//
 
 import Foundation
 import SocketIO
@@ -17,84 +9,41 @@ import Combine
 
 // MARK: - Protocol
 
-/// Chat servisi sözleşmesi.
-///
-/// **Neden `getSocket()` kaldırıldı?**
-/// Eskiden `ChatViewModel` şunu yapıyordu:
-/// ```swift
-/// socketManager.getSocket().on("receive_message") { data, ack in ... }
-/// ```
-/// Bu, ViewModel'in Socket.IO'nun iç yapısını bildiği anlamına geliyordu.
-/// Yarın WebSocket çözümünü değiştirmek istersen (ör. URLSessionWebSocketTask),
-/// ViewModel'i baştan yazman gerekirdi.
-///
-/// Şimdi ViewModel sadece `messagePublisher`'ı dinliyor.
-/// Alt yapı ne olursa olsun (Socket.IO, gRPC, WebSocket) ViewModel'e `Message` gelir.
-/// Bu, **Dependency Inversion Principle** (SOLID'in D'si) uygulamasıdır.
 protocol ChatServiceProtocol {
-    /// Gelen mesajları dinlemek için Combine publisher.
     var messagePublisher: AnyPublisher<Message, Never> { get }
-    
-    /// Yeni kullanıcı kaydı sinyali
     var userRegisteredPublisher: AnyPublisher<Void, Never> { get }
-    
-    /// Okundu bilgisi geldiğinde: [mesaj ID'leri] yayını
     var messageReadPublisher: AnyPublisher<[String], Never> { get }
-    
-    /// Bağlantı durumu değişimi (true=connected, false=disconnected)
     var connectionStatePublisher: AnyPublisher<Bool, Never> { get }
-    
-    /// Profil güncellemesi: (userId, nickname, avatarName, avatarUrl)
     var profileUpdatedPublisher: AnyPublisher<(String, String, String, String), Never> { get }
-    
-    /// Bağlantı durumu
     var isConnected: Bool { get }
     
     func connect()
     func disconnect()
     func sendMessage(text: String, senderId: String, receiverId: String, clientId: String?, imageUrl: String?)
-    
-    /// Fotoğraf yükle ve URL döndür
     func uploadMessageImage(_ data: Data) async throws -> String
-    
-    /// Mesajları okundu olarak işaretle
     func sendReadReceipt(messageIds: [String], readerId: String)
+    
+    var cameraToggledPublisher: AnyPublisher<[String: Any], Never> { get }
+    func emitCameraToggled(isOff: Bool, to opponentId: String)
 }
 
 // MARK: - Implementation
 
-/// Socket.IO tabanlı chat servisi.
-///
-/// **Değişiklikler (eski halinden farklar):**
-/// 1. `static let shared` → DI ile inject ediliyor
-/// 2. `getSocket()` → kaldırıldı. ViewModel artık raw socket'e erişemez
-/// 3. Closure callback'ler → Combine `PassthroughSubject` ile replace edildi
-/// 4. `sendMessage` artık `senderId` parametresi alıyor — AuthManager.shared'a bağımlılık YOK
-///
-/// **Neden Combine PassthroughSubject?**
-/// `PassthroughSubject` bir "köprü"dür: imperativ dünyadan (Socket.IO callback)
-/// dekleratif dünyaya (Combine pipeline) bağlanır. Socket.IO callback'lerini
-/// Combine stream'ine dönüştürmenin en temiz yolu budur.
 final class SocketChatService: ChatServiceProtocol {
     
-    // MARK: - Combine Subjects (iç kullanım)
-    
-    /// Gelen mesajları yayan subject.
+    // MARK: - Subjects
     private let _messageSubject = PassthroughSubject<Message, Never>()
-    
-    /// Yeni kullanıcı kaydı sinyali
     private let _userRegisteredSubject = PassthroughSubject<Void, Never>()
-    
-    /// Okundu bilgisi sinyali: [mesaj ID'leri]
     private let _messageReadSubject = PassthroughSubject<[String], Never>()
-    
-    /// Bağlantı durumu sinyali
     private let _connectionStateSubject = PassthroughSubject<Bool, Never>()
-    
-    /// Profil güncellemesi sinyali: (userId, nickname, avatarName, avatarUrl)
     private let _profileUpdatedSubject = PassthroughSubject<(String, String, String, String), Never>()
+    private let _incomingCallSubject = PassthroughSubject<[String: Any], Never>()
+    private let _callAnsweredSubject = PassthroughSubject<[String: Any], Never>()
+    private let _iceCandidateSubject = PassthroughSubject<[String: Any], Never>()
+    private let _callEndedSubject = PassthroughSubject<[String: Any], Never>()
+    private let _cameraToggledSubject = PassthroughSubject<[String: Any], Never>()
     
-    // MARK: - Public Publishers (dışarıya açılan arayüz)
+    // MARK: - Publishers
     
     var messagePublisher: AnyPublisher<Message, Never> {
         _messageSubject.eraseToAnyPublisher()
@@ -116,31 +65,53 @@ final class SocketChatService: ChatServiceProtocol {
         _profileUpdatedSubject.eraseToAnyPublisher()
     }
     
-    // MARK: - Socket.IO internals
+    // MARK: - WebRTC Publishers
+    var incomingCallPublisher: AnyPublisher<[String: Any], Never> {
+        _incomingCallSubject.eraseToAnyPublisher()
+    }
+    var callAnsweredPublisher: AnyPublisher<[String: Any], Never> {
+        _callAnsweredSubject.eraseToAnyPublisher()
+    }
+    var iceCandidatePublisher: AnyPublisher<[String: Any], Never> {
+        _iceCandidateSubject.eraseToAnyPublisher()
+    }
+    var callEndedPublisher: AnyPublisher<[String: Any], Never> {
+        _callEndedSubject.eraseToAnyPublisher()
+    }
+    var cameraToggledPublisher: AnyPublisher<[String: Any], Never> {
+        _cameraToggledSubject.eraseToAnyPublisher()
+    }
     
+    // MARK: - Socket.IO
     private var manager: SocketManager
     private var socket: SocketIOClient
     private(set) var isConnected: Bool = false
     
     // MARK: - Init
-    
     init() {
         let url = URL(string: APIEndpoints.baseURL)!
         
         manager = SocketManager(socketURL: url, config: [
-            .log(false),     // Production'da log kapatıldı (eskiden .log(true) idi)
+            .log(false),
             .compress,
-            .forceWebsockets(true)  // Daha stabil bağlantı
+            .forceWebsockets(true)
         ])
         socket = manager.defaultSocket
         
         setupListeners()
     }
     
+    private var currentUserIdForSocket: String?
+    
     // MARK: - Connection
     
     func connect() {
-        guard !isConnected else { return }  // Çift bağlantı önleme
+        guard !isConnected else { return }
+        
+        if let currentUserId = UserDefaults.standard.string(forKey: "userId") {
+            self.currentUserIdForSocket = currentUserId
+        }
+        
         print("[SocketService] Connecting...")
         socket.connect()
     }
@@ -150,16 +121,6 @@ final class SocketChatService: ChatServiceProtocol {
         isConnected = false
     }
     
-    // MARK: - Send Message
-    
-    /// Mesaj gönderir.
-    ///
-    /// **Eski hali vs yeni hali:**
-    /// Eski: `sendMessage(text:, receiverId:)` → içeride `AuthManager.shared.currentUserId` kullanıyordu
-    /// Yeni: `sendMessage(text:, senderId:, receiverId:)` → dışarıdan alıyor
-    ///
-    /// **Neden?** Service katmanı, "kim giriş yapmış" bilgisini bilmemeli.
-    /// Bu, **Information Hiding** prensibidir. Servis sadece "şu mesajı gönder" der.
     func sendMessage(text: String, senderId: String, receiverId: String, clientId: String? = nil, imageUrl: String? = nil) {
         var data: [String: Any] = [
             "text": text,
@@ -175,7 +136,7 @@ final class SocketChatService: ChatServiceProtocol {
         socket.emit("chat_message", data)
     }
     
-    /// Mesaj görseli yükle
+    // MARK: - Image Upload
     func uploadMessageImage(_ data: Data) async throws -> String {
         let url = URL(string: "\(APIEndpoints.baseURL)/messages/upload")!
         var request = URLRequest(url: url)
@@ -197,7 +158,7 @@ final class SocketChatService: ChatServiceProtocol {
         let (responseData, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw PROrror(message: "Upload failed")
+            throw ImageUploadError(message: "Upload failed")
         }
         
         struct UploadResponse: Decodable {
@@ -208,9 +169,9 @@ final class SocketChatService: ChatServiceProtocol {
         return result.imageUrl
     }
     
-    struct PROrror: Error { let message: String }
+    struct ImageUploadError: Error { let message: String }
     
-    /// Mesajları okundu olarak işaretle — server'a gönder
+    // MARK: - Read Receipts
     func sendReadReceipt(messageIds: [String], readerId: String) {
         guard !messageIds.isEmpty else { return }
         let data: [String: Any] = [
@@ -220,7 +181,7 @@ final class SocketChatService: ChatServiceProtocol {
         socket.emit("mark_as_read", data)
     }
     
-    /// Profil güncellemesini tüm bağlı client'lara broadcast et
+    // MARK: - Profile Broadcast
     func emitProfileUpdate(userId: String, nickname: String, avatarName: String, avatarUrl: String) {
         let data: [String: Any] = [
             "userId": userId,
@@ -231,30 +192,51 @@ final class SocketChatService: ChatServiceProtocol {
         socket.emit("profile_updated", data)
     }
     
-    // MARK: - Private: Socket Listeners
+    // MARK: - WebRTC Emitters
     
+    func emitCallUser(data: [String: Any]) {
+        socket.emit("call-user", data)
+    }
+    
+    func emitAnswerCall(data: [String: Any]) {
+        socket.emit("answer-call", data)
+    }
+    
+    func emitIceCandidate(data: [String: Any]) {
+        socket.emit("ice-candidate", data)
+    }
+    
+    func emitEndCall(to opponentId: String) {
+        let data: [String: Any] = ["to": opponentId]
+        socket.emit("end-call", data)
+    }
+    
+    func emitCameraToggled(isOff: Bool, to opponentId: String) {
+        let data: [String: Any] = ["to": opponentId, "isOff": isOff]
+        socket.emit("camera-toggled", data)
+    }
+    
+    // MARK: - Socket Listeners
     private func setupListeners() {
-        // Bağlantı başarılı
         socket.on(clientEvent: .connect) { [weak self] _, _ in
             print("[SocketService] Connected ✅")
             self?.isConnected = true
+            if let uid = self?.currentUserIdForSocket {
+                self?.socket.emit("register", uid)
+            }
             self?._connectionStateSubject.send(true)
         }
         
-        // Bağlantı koptu
         socket.on(clientEvent: .disconnect) { [weak self] _, _ in
             print("[SocketService] Disconnected ⚠️")
             self?.isConnected = false
             self?._connectionStateSubject.send(false)
         }
         
-        // Yeni kullanıcı kaydı
         socket.on("user_registered") { [weak self] _, _ in
-            print("[SocketService] New user registered signal received")
             self?._userRegisteredSubject.send()
         }
         
-        // Yeni mesaj alındı
         socket.on("receive_message") { [weak self] data, _ in
             guard let dataArray = data as? [[String: Any]],
                   let json = dataArray.first else { return }
@@ -268,7 +250,6 @@ final class SocketChatService: ChatServiceProtocol {
             }
         }
         
-        // Okundu bilgisi alındı
         socket.on("read_receipt") { [weak self] data, _ in
             guard let dataArray = data as? [[String: Any]],
                   let json = dataArray.first,
@@ -277,7 +258,6 @@ final class SocketChatService: ChatServiceProtocol {
             self?._messageReadSubject.send(messageIds)
         }
         
-        // Profil güncellemesi alındı
         socket.on("profile_updated") { [weak self] data, _ in
             guard let dataArray = data as? [[String: Any]],
                   let json = dataArray.first,
@@ -287,8 +267,39 @@ final class SocketChatService: ChatServiceProtocol {
             
             let avatarUrl = json["avatarUrl"] as? String ?? ""
             
-            print("[SocketService] Profile updated for user: \(userId)")
             self?._profileUpdatedSubject.send((userId, nickname, avatarName, avatarUrl))
+        }
+        
+        // MARK: WebRTC Listeners
+        
+        socket.on("call-made") { [weak self] data, _ in
+            guard let dataArray = data as? [[String: Any]],
+                  let json = dataArray.first else { return }
+            self?._incomingCallSubject.send(json)
+        }
+        
+        socket.on("call-answered") { [weak self] data, _ in
+            guard let dataArray = data as? [[String: Any]],
+                  let json = dataArray.first else { return }
+            self?._callAnsweredSubject.send(json)
+        }
+        
+        socket.on("ice-candidate") { [weak self] data, _ in
+            guard let dataArray = data as? [[String: Any]],
+                  let json = dataArray.first else { return }
+            self?._iceCandidateSubject.send(json)
+        }
+        
+        socket.on("camera-toggled") { [weak self] data, _ in
+            guard let dataArray = data as? [[String: Any]],
+                  let json = dataArray.first else { return }
+            self?._cameraToggledSubject.send(json)
+        }
+        
+        socket.on("end-call") { [weak self] data, _ in
+            guard let dataArray = data as? [[String: Any]],
+                  let json = dataArray.first else { return }
+            self?._callEndedSubject.send(json)
         }
     }
 }

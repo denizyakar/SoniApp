@@ -8,20 +8,9 @@
 
 import Foundation
 
-/// Tüm backend endpoint'lerini tek bir yerde toplar.
-///
-/// **Neden var?**
-/// Önceden `"url"` string'i 4 farklı dosyada tekrarlanıyordu:
-/// - AuthManager.swift
-/// - ChatViewModel.swift
-/// - TokenService.swift (3 kez!)
-///
-/// Eğer domain değişirse (ör. staging ortamı, yeni domain)
-/// 4 dosyada 6 yeri bulup değiştirmen gerekirdi.
-/// Şimdi sadece `baseURL`'i değiştirmen yeterli.
 enum APIEndpoints {
     
-    static let baseURL = "url"
+    static let baseURL = "https://soni-app.xyz"
     
     // MARK: - Auth
     static var login: URL {
@@ -37,6 +26,10 @@ enum APIEndpoints {
         URL(string: "\(baseURL)/users")!
     }
     
+    static func updateProfile(userId: String) -> URL {
+        URL(string: "\(baseURL)/users/\(userId)/profile")!
+    }
+    
     // MARK: - Messages
     static func messages(from senderId: String, to receiverId: String) -> URL {
         URL(string: "\(baseURL)/messages?from=\(senderId)&to=\(receiverId)")!
@@ -47,7 +40,15 @@ enum APIEndpoints {
         URL(string: "\(baseURL)/update-token")!
     }
     
+    static var updateVoipToken: URL {
+        URL(string: "\(baseURL)/update-voip-token")!
+    }
+    
     static var removeToken: URL {
         URL(string: "\(baseURL)/remove-token")!
+    }
+    
+    static var removeVoipToken: URL {
+        URL(string: "\(baseURL)/remove-voip-token")!
     }
 }

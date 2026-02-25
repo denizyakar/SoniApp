@@ -2,65 +2,30 @@
 //  MessageRepository.swift
 //  SoniApp
 //
-//  Mesaj verisi koordinasyonu: Network ↔ SwiftData arasındaki köprü.
-//  Eskiden bu mantık ChatViewModel'in içinde dağınıktı.
-//
 
 import Foundation
 import SwiftData
-import Combine
 
 // MARK: - Protocol
 
-/// Mesaj veri operasyonlarının sözleşmesi.
-///
-/// **Neden Repository Pattern?**
-/// ChatViewModel eskiden şunları yapıyordu:
-/// 1. REST API'den mesaj geçmişi çek (URLSession inline kod)
-/// 2. Socket'ten gelen mesajı parse et
-/// 3. Message → MessageItem mapping yap
-/// 4. ISO8601 tarih parse et
-/// 5. SwiftData context.insert() + save()
-///
-/// ViewModel'in görevi SADECE UI state yönetmek olmalı. Veri nereden gelir,
-/// nereye kaydedilir — bunlar ViewModel'in bilmesi gereken şeyler değil.
-/// Repository Pattern bu mantığı tek bir yerde toplar.
-///
-/// **Martin Fowler:** "A Repository mediates between the domain and data mapping
-/// layers, acting like an in-memory domain object collection."
 protocol MessageRepositoryProtocol {
-    /// Sunucudan mesaj geçmişini çeker ve lokal DB'ye kaydeder.
     func fetchHistory(myId: String, otherId: String) async throws
-    
-    /// Tek bir mesajı lokal DB'ye kaydeder (socket'ten gelen).
     func saveMessage(_ message: Message) throws
 }
 
 // MARK: - Implementation
 
-/// SwiftData tabanlı mesaj repository'si.
-///
-/// **Mapping mantığı burada:**
-/// `Message` (network DTO, struct) → `MessageItem` (SwiftData @Model, class)
-/// dönüşümü artık ViewModel'de değil, burada yapılıyor.
-///
-/// **Neden `@ModelActor`?**
-/// SwiftData context'i thread-safe değildir. `@ModelActor` ile
-/// repository kendi actor'ünde çalışır — main thread'i bloklamaz.
-/// Ancak bu ilk versiyon basitlik için MainActor kullanıyor.
-/// İleride `@ModelActor` geçişi yapılabilir.
 @MainActor
 final class MessageRepository: MessageRepositoryProtocol {
     
     private let modelContext: ModelContext
     
-    // Network config (AuthService'le aynı proxy-free config)
-    private var session: URLSession {
+    private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.connectionProxyDictionary = [:]
         config.timeoutIntervalForRequest = 30.0
         return URLSession(configuration: config)
-    }
+    }()
     
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
@@ -75,9 +40,7 @@ final class MessageRepository: MessageRepositoryProtocol {
         
         let messages = try JSONDecoder().decode([Message].self, from: data)
         
-        // Batch insert — her mesaj için ayrı save() çağırmak yerine
-        // hepsini ekleyip tek seferde save() çağırıyoruz.
-        // Bu, disk I/O'yu azaltır.
+        // Batch insert
         for msg in messages {
             insertMessageItem(from: msg)
         }
@@ -92,22 +55,18 @@ final class MessageRepository: MessageRepositoryProtocol {
         try modelContext.save()
     }
     
-    // MARK: - Save MessageItem (for offline queue)
-    
-    /// Doğrudan MessageItem kaydet (pending mesajlar için)
     func saveItem(_ item: MessageItem) throws {
         modelContext.insert(item)
         try modelContext.save()
     }
     
-    /// Context'i kaydet (status güncellemeleri için)
     func save() throws {
         try modelContext.save()
     }
     
     // MARK: - Pending Messages (offline queue)
     
-    /// Gönderilmeyi bekleyen (pending/failed) mesajları getir
+    /// Get pending/failed messages for retry
     func getPendingMessages(senderId: String) -> [MessageItem] {
         let pendingRaw = MessageStatus.pending.rawValue
         let failedRaw = MessageStatus.failed.rawValue
@@ -127,7 +86,6 @@ final class MessageRepository: MessageRepositoryProtocol {
     
     // MARK: - Read Receipts
     
-    /// Belirtilen mesajları "okundu" olarak işaretle
     func markAsRead(messageIds: [String]) {
         let predicate = #Predicate<MessageItem> { item in
             item.isRead == false
@@ -148,7 +106,6 @@ final class MessageRepository: MessageRepositoryProtocol {
         }
     }
     
-    /// Belirli bir göndericiden bana gelen okunmamış mesaj ID'lerini getir
     func getUnreadMessageIds(from senderId: String, to receiverId: String) -> [String] {
         let predicate = #Predicate<MessageItem> { item in
             item.senderId == senderId &&
@@ -165,9 +122,8 @@ final class MessageRepository: MessageRepositoryProtocol {
         }
     }
     
-    // MARK: - Delete Message (lokal)
+    // MARK: - Delete
     
-    /// Mesajı lokal SwiftData'dan sil (Delete from me)
     func deleteMessage(id: String) throws {
         let predicate = #Predicate<MessageItem> { item in
             item.id == id
@@ -180,9 +136,6 @@ final class MessageRepository: MessageRepositoryProtocol {
         try modelContext.save()
     }
     
-    // MARK: - Get Single Message
-    
-    /// Tek bir mesajı ID ile getir
     func getMessage(byId id: String) throws -> MessageItem? {
         let predicate = #Predicate<MessageItem> { item in
             item.id == id
@@ -192,7 +145,7 @@ final class MessageRepository: MessageRepositoryProtocol {
         return results.first
     }
     
-    // MARK: - Private: DTO → Entity Mapping
+    // MARK: - DTO → Entity Mapping
     
     private func insertMessageItem(from message: Message) {
         let date = Date.fromISO8601(message.date ?? "") ?? Date()
@@ -207,7 +160,7 @@ final class MessageRepository: MessageRepositoryProtocol {
             senderName: message.senderName ?? "",
             isRead: message.isRead ?? false,
             readAt: readAt,
-            imageUrl: message.imageUrl // YENİ: Görsel URL'i kaydet
+            imageUrl: message.imageUrl
         )
         
         modelContext.insert(newItem)

@@ -2,19 +2,9 @@
 //  AppError.swift
 //  SoniApp
 //
-//  Typed error hierarchy — replaces all silent `try?` failures
-//  with explicit, debuggable error cases.
-//
 
 import Foundation
 
-/// Uygulamanın tüm katmanlarında kullanılan merkezi hata enum'u.
-///
-/// **Neden var?**
-/// Projede her yerde `try?` ile hatalar yutuluyordu. Bu enum sayesinde:
-/// - Her hata türü açıkça tanımlı → debug kolaylaşır
-/// - ViewModel'ler hatayı UI'a taşıyabilir → kullanıcı ne olduğunu bilir
-/// - Gelecekte telemetri (Crashlytics vb.) eklendiğinde her hata loglanabilir
 enum AppError: Error, LocalizedError {
     
     // MARK: - Network Errors
@@ -38,7 +28,7 @@ enum AppError: Error, LocalizedError {
     case socketDisconnected
     case messageSendFailed
     
-    /// Kullanıcıya gösterilebilecek açıklama
+    /// User-facing error message
     var errorDescription: String? {
         switch self {
         case .networkError(let error):

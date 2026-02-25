@@ -2,24 +2,6 @@
 //  ChatViewModel.swift
 //  SoniApp
 //
-//  TAMAMEN YENİDEN YAZILDI.
-//
-//  Önceki sorunlar:
-//  1. SocketChatService.shared — singleton doğrudan erişim
-//  2. getSocket().on() — raw socket erişimi (leaky abstraction)
-//  3. AuthManager.shared.currentUserId — model seviyesinde singleton
-//  4. URLSession inline — ViewModel'de network kodu
-//  5. ISO8601DateFormatter her seferinde yeniden yaratılıyor
-//  6. try? context.save() — sessiz hata yutma
-//  7. saveMessageToDB() — DTO→Entity mapping ViewModel'de
-//
-//  Şimdi:
-//  - Dependencies setup()'ta inject ediliyor
-//  - Socket mesajları Combine publisher ile geliyor
-//  - Tüm veri operasyonları Repository'de
-//  - ViewModel sadece UI state yönetiyor
-//  - Read receipt desteği eklendi
-//
 
 import Foundation
 import Combine
@@ -32,22 +14,17 @@ class ChatViewModel: ObservableObject {
     // MARK: - UI State
     @Published var text = ""
     
-    // MARK: - Dependencies (setup'ta inject edilen)
-    
     private var chatService: SocketChatService?
     private var sessionStore: SessionStoreProtocol?
     private var messageRepository: MessageRepository?
     
-    // MARK: - Private
-    
     private var currentUser: ChatUser?
     private var cancellables = Set<AnyCancellable>()
-    private var isSetUp = false  // ← Duplicate setup önleme
+    private var isSetUp = false
     
     // MARK: - Setup
     
     func setup(user: ChatUser, context: ModelContext, chatService: SocketChatService, sessionStore: SessionStoreProtocol) {
-        // onAppear her çağrıldığında tekrar subscribe olmayı önle
         guard !isSetUp else { return }
         isSetUp = true
         
@@ -61,8 +38,14 @@ class ChatViewModel: ObservableObject {
         subscribeToReadReceipts()
         subscribeToConnectionState()
         
-        // Chat açıldığında karşıdan gelen okunmamış mesajları okundu işaretle
         markUnreadMessagesAsRead()
+        
+        // Re-mark when app returns from background
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .sink { [weak self] _ in
+                self?.markUnreadMessagesAsRead()
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Fetch History
@@ -74,7 +57,7 @@ class ChatViewModel: ObservableObject {
         Task {
             do {
                 try await messageRepository?.fetchHistory(myId: myId, otherId: otherId)
-                // History yüklendikten sonra tekrar okundu işaretle
+                // Re-mark as read after history loads
                 markUnreadMessagesAsRead()
             } catch {
                 print("❌ Fetch history error: \(error.localizedDescription)")
@@ -82,7 +65,7 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Subscribe to Socket Messages
+    // MARK: - Socket Subscription
     
     private func subscribeToMessages() {
         chatService?.messagePublisher
@@ -93,19 +76,18 @@ class ChatViewModel: ObservableObject {
             .sink { [weak self] message in
                 guard let self = self else { return }
                 do {
-                    // Eğer bu mesaj benim gönderdiğim bir mesajın server echo'suysa
-                    // lokal pending kaydı sil, server versiyonunu kaydet
+                    // Server echo — replace local pending message with server version
                     if message.senderId == self.sessionStore?.currentUserId {
-                        // Server echo — pending/lokal mesajı server'dan gelen gerçek ID ile değiştir
                         if let clientId = message.clientId {
                             try? self.messageRepository?.deleteMessage(id: clientId)
                         }
                         try self.messageRepository?.saveMessage(message)
                     } else {
-                        // Karşıdan gelen mesaj
+                        // Incoming message
                         try self.messageRepository?.saveMessage(message)
-                        // Chat açıksa hemen okundu işaretle
-                        self.sendReadReceipt(for: [message.id])
+                        if UIApplication.shared.applicationState == .active {
+                            self.sendReadReceipt(for: [message.id])
+                        }
                     }
                 } catch {
                     print("❌ Save message error: \(error.localizedDescription)")
@@ -116,7 +98,7 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - Read Receipts
     
-    /// Read receipt'leri dinle — kendi mesajlarımızın okundu durumunu güncelle
+    /// Subscribe to read receipts to update message status
     private func subscribeToReadReceipts() {
         chatService?.messageReadPublisher
             .receive(on: DispatchQueue.main)
@@ -126,18 +108,17 @@ class ChatViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    /// Bağlantı durumunu dinle — reconnect olunca pending mesajları retry et
+    /// Retry pending messages on reconnect
     private func subscribeToConnectionState() {
         chatService?.connectionStatePublisher
             .receive(on: DispatchQueue.main)
-            .filter { $0 == true }  // Sadece bağlandığında
+            .filter { $0 == true }
             .sink { [weak self] _ in
                 self?.retryPendingMessages()
             }
             .store(in: &cancellables)
     }
     
-    /// Chat açıldığında karşıdan gelen okunmamış mesajları "read" işaretle
     private func markUnreadMessagesAsRead() {
         guard let myId = sessionStore?.currentUserId,
               let otherId = currentUser?.id else { return }
@@ -149,15 +130,13 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    /// Server'a "bu mesajları okudum" bilgisi gönder
     private func sendReadReceipt(for messageIds: [String]) {
         guard let myId = sessionStore?.currentUserId else { return }
         chatService?.sendReadReceipt(messageIds: messageIds, readerId: myId)
     }
     
-    // MARK: - Delete Message (lokal)
+    // MARK: - Delete Message
     
-    /// Mesajı sadece lokal SwiftData'dan sil (Delete from me)
     func deleteMessage(id: String) {
         do {
             try messageRepository?.deleteMessage(id: id)
@@ -170,57 +149,53 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - Retry Logic
     
-    /// Bağlantı geldiğinde pending/failed mesajları tekrar gönder
+    /// Retry pending/failed messages on reconnect
     func retryPendingMessages() {
         guard let myId = sessionStore?.currentUserId,
               chatService?.isConnected == true else { return }
         
-        // MainActor'de pending mesajları al
+        // Get pending messages on MainActor
         let pendingMessages = messageRepository?.getPendingMessages(senderId: myId) ?? []
         
-        // Retry işlemini başlat (Asenkron)
+        // Start retry (async)
         Task {
             for item in pendingMessages {
-                // Zaten işlem yapılıyorsa atla (örneğin pending status'unda upload'da)
-                // Ama şimdilik basit tutalım.
+                // Skip if already being processed
+                // Keeping it simple for now.
                 
                 var finalImageUrl = item.imageUrl
                 
-                // 1. Resim varsa ve LOCAL URL ise (file://) → Önce Upload Et
+                // If image URL is local (file://), upload first
                 if let urlString = item.imageUrl, urlString.hasPrefix("file://"),
                    let localUrl = URL(string: urlString) {
                     
                     do {
-                        // Dosya var mı kontrol et
                         if FileManager.default.fileExists(atPath: localUrl.path) {
                             let data = try Data(contentsOf: localUrl)
-                            // Upload
                             let serverUrl = try await chatService?.uploadMessageImage(data)
-                            // Başarılı! DB'yi güncelle
                             await MainActor.run {
                                 item.imageUrl = serverUrl
                                 try? messageRepository?.save()
                             }
                             finalImageUrl = serverUrl
                         } else {
-                            // Dosya yoksa yapacak bir şey yok, hatayı logla
-                            print("❌ Retry: Local file missing for pending message")
+                            print("❌ Retry: Local file missing")
                         }
                     } catch {
                         print("❌ Retry upload failed: \(error)")
-                        // Upload başarısızsa bu turu pas geç (sonra tekrar dener)
+                        // Upload failed, skip this message
                         continue
                     }
                 }
                 
-                // 2. Socket ile gönder (Text + (Varsa) Server Image URL)
+                // Socket emit (text + optional server image URL)
                 sendSocketMessage(
                     text: item.text,
                     clientId: item.id,
                     imageUrl: finalImageUrl
                 )
                 
-                // Status güncellemesi (failed -> pending)
+                // Update status
                 await MainActor.run {
                     if item.status == .failed {
                         item.status = .pending
@@ -233,33 +208,27 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Send Message (Unified Text + Image)
     
-    /// Hem yazıyı hem de (varsa) resmi gönderir.
-    /// Resim varsa:
-    /// 1. Önce lokal diske kaydet (Pending modda hemen ekranda görünsün)
-    /// 2. Upload et
-    /// 3. Socket'ten URL ile gönder
+    /// Sends a message with optional image.
     func sendMessage(image: UIImage? = nil) {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Boş mesaj gönderme (hem yazı yok hem resim yoksa)
         guard !trimmedText.isEmpty || image != nil,
               let myId = sessionStore?.currentUserId,
               let otherId = currentUser?.id else { return }
         
         let messageText = text
-        text = "" // UI'ı temizle
+        text = ""
         
         let clientId = UUID().uuidString
         let date = Date()
         
-        // 1. Resim varsa önce LOKAL (Persistent) URL oluştur
-        // Böylece upload bitmeden ekranda resmi görebiliriz ve uygulama kapansa bile silinmez.
+        // Save image to local persistent storage first
         var localImageUrl: String? = nil
         if let image = image {
             localImageUrl = saveImageToLocalCache(image: image)
         }
         
-        // 2. Pending Item oluştur (Lokal URL ile)
+        // Create pending message item
         let pendingItem = MessageItem(
             id: clientId,
             text: messageText,
@@ -268,7 +237,7 @@ class ChatViewModel: ObservableObject {
             date: date,
             senderName: sessionStore?.currentUsername ?? "",
             status: .pending,
-            imageUrl: localImageUrl // Lokal dosya yolu
+            imageUrl: localImageUrl
         )
         
         do {
@@ -277,45 +246,39 @@ class ChatViewModel: ObservableObject {
             print("❌ Save pending message error: \(error.localizedDescription)")
         }
         
-        // 3. Asenkron işlem başlat (Upload + Socket)
+        // Async: upload + socket emit
         Task {
-            // A) Sadece yazı varsa
+            // Text only
             if image == nil {
                 sendSocketMessage(text: messageText, clientId: clientId, imageUrl: nil)
                 return
             }
             
-            // B) Resim varsa → önce Upload
+            // Image: upload then send
             do {
                 guard let image = image,
                       let data = image.jpegData(compressionQuality: 0.7) else { return }
                 
-                // Upload'a başla...
-                // (İstersek pendingItem.text'i "Uploading..." yapabiliriz ama gerek yok, kullanıcı kendi yazdığını görsün)
-                
                 let serverImageUrl = try await chatService?.uploadMessageImage(data)
-                
-                // Upload bitti, şimdi sunucudan gelen URL ile socket mesajı at
                 sendSocketMessage(text: messageText, clientId: clientId, imageUrl: serverImageUrl)
                 
             } catch {
                 print("❌ Image upload failed: \(error)")
                 await MainActor.run {
                     pendingItem.status = .failed
-                    // pendingItem.text = "❌ Upload Failed" // YAPMA: Orijinal içeriği koru!
                     try? messageRepository?.save()
                 }
             }
         }
     }
     
-    /// Socket üzerinden mesajı gönderir (MainActor üzerinde çalışır)
+    /// Emit message via socket
     @MainActor
     private func sendSocketMessage(text: String, clientId: String, imageUrl: String?) {
         guard let myId = sessionStore?.currentUserId,
               let otherId = currentUser?.id,
               chatService?.isConnected == true else {
-            // Bağlantı yoksa failed işaretle
+            // No connection — mark as failed
             if let item = try? messageRepository?.getMessage(byId: clientId) {
                 item.status = .failed
                 try? messageRepository?.save()
@@ -330,21 +293,17 @@ class ChatViewModel: ObservableObject {
             clientId: clientId,
             imageUrl: imageUrl
         )
-        // Başarılı emit sonrası pending olarak kalır, echo gelince düzelir.
+        // Stays pending until server echo arrives
     }
     
-    /// Resmi Documents/PendingImages klasörüne kaydeder ve file URL döndürür
-    /// (Persistent Storage: Uygulama yeniden başlasa bile silinmez)
+    /// Save image to Documents/PendingImages (persistent across app restarts)
     private func saveImageToLocalCache(image: UIImage) -> String? {
         guard let data = image.jpegData(compressionQuality: 0.8) else { return nil }
         
         let fileManager = FileManager.default
         guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else { return nil }
         
-        // "PendingImages" alt klasörü
         let folderURL = documentsURL.appendingPathComponent("PendingImages")
-        
-        // Klasör yoksa yarat
         if !fileManager.fileExists(atPath: folderURL.path) {
             try? fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
         }
@@ -354,7 +313,7 @@ class ChatViewModel: ObservableObject {
         
         do {
             try data.write(to: fileUrl)
-            return fileUrl.absoluteString // file:///...
+            return fileUrl.absoluteString
         } catch {
             print("❌ Local image save error: \(error)")
             return nil
