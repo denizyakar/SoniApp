@@ -1,33 +1,28 @@
 //
 //  ChatListView.swift
 //  SoniApp
-//
-//  DEĞİŞTİRİLDİ: Unread badge + isInChatList + deeplink + profile menü.
-//
 
 import SwiftUI
 import SwiftData
 
-/// Kullanıcı listesi ekranı.
+/// User list screen.
 struct ChatListView: View {
     @EnvironmentObject private var container: DependencyContainer
     @StateObject private var viewModel = ChatListViewModel()
     @Environment(\.scenePhase) private var scenePhase
     
-    // SWIFT DATA İPTAL (Geçici olarak doğrudan ViewModel'den veri alıyoruz)
+    // Using ViewModel data directly instead of SwiftData @Query
     // @Query private var users: [UserItem]
     @Environment(\.modelContext) private var context
     
-    /// Programmatic navigation için — deeplink bunu kullanır
+    /// For programmatic navigation — deeplink uses this
     @State private var navigationPath = NavigationPath()
     @State private var showingProfile = false
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            // viewModel.filteredUsers kullanıyoruz (Search ve filtreleme zaten ViewModel'de)
             List(viewModel.filteredUsers) { user in
                 
-                // ChatUser struct zaten elimizde, tekrar oluşturmaya gerek yok
                 let chatUserStruct = user
                 
                 NavigationLink(value: chatUserStruct) {
@@ -38,29 +33,37 @@ struct ChatListView: View {
                         VStack(alignment: .leading) {
                             Text(user.displayName)
                                 .font(.headline)
+                                .foregroundColor(AppTheme.white)
+                            
                             
                             Text("Click to start chatting")
                                 .font(.footnote)
-                                .foregroundColor(Color(.systemGray))
+                                .foregroundColor(AppTheme.white)
+                            
                         }
                         
                         Spacer()
                         
-                        // Unread badge — kırmızı nokta + sayı
+                        // Unread badge
                         if let count = container.sessionStore.unreadCounts[user.id], count > 0 {
                             Text("\(count)")
-                                .font(.caption2)
+                                .font(.subheadline)
                                 .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .frame(minWidth: 20, minHeight: 20)
-                                .background(Color.red)
+                                .foregroundColor(AppTheme.primary)
+                                .frame(minWidth: 30, minHeight: 30)
+                                .background(.white)
                                 .clipShape(Circle())
                         }
                     }
                     .padding(.vertical, 8)
                 }
+                .listRowBackground(AppTheme.backgroundLight)
+                .listRowSeparatorTint(AppTheme.white.opacity(0.1))
             }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.background)
             .navigationTitle("Messages")
+            
             .navigationDestination(for: ChatUser.self) { chatUser in
                 ChatView(user: chatUser)
             }
@@ -69,14 +72,15 @@ struct ChatListView: View {
                     Button("Logout") {
                         container.makeAuthService().logout()
                     }
-                    .foregroundColor(.red)
+                    .foregroundColor(AppTheme.white.opacity(0.9))
+                    .bold()
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showingProfile = true
                     } label: {
                         AvatarView(
-                            imageUrl: URL(string: "\(APIEndpoints.baseURL)\(container.sessionStore.currentAvatarUrl ?? "")"),
+                            imageUrl: container.sessionStore.currentAvatarImageUrl,
                             sfSymbol: container.sessionStore.currentAvatarName ?? "person.circle",
                             size: 28
                         )
@@ -88,7 +92,7 @@ struct ChatListView: View {
                     .environmentObject(container)
             }
             .onAppear {
-                // ChatListView açıldığını bildir (push bastırmak için)
+                // Notify that ChatListView is visible (for push suppression)
                 container.sessionStore.isInChatList = true
                 
                 viewModel.setup(
@@ -98,10 +102,10 @@ struct ChatListView: View {
                     sessionStore: container.sessionStore
                 )
                 
-                // App-wide retry servisini başlat (ModelContext burada mevcut)
+                // Init app-wide retry service (ModelContext available here)
                 container.retryService.setup(modelContext: context)
                 
-                // App kapalıyken push'a tıklandıysa → UserDefaults'ta deeplink var mı?
+                // If push was tapped while app was closed → check UserDefaults deeplink
                 checkPendingDeepLink()
             }
             .onDisappear {
@@ -112,15 +116,18 @@ struct ChatListView: View {
                     container.sessionStore.isInChatList = false
                 } else if newPhase == .active {
                     container.sessionStore.isInChatList = true
-                    // App geri geldiğinde pending mesajları kontrol et
+                    // Retry pending messages on app foreground
                     container.retryService.retryAllPendingMessages()
                     
-                    // Unread Count'ları güncelle (Background'dan gelince otomatik sync)
+                    // Sync unread counts (auto-sync from background)
                     viewModel.refreshUsers()
+                    
+                    // Clear app icon badge when user opens the app
+                    UNUserNotificationCenter.current().setBadgeCount(0)
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .pushNotificationTapped)) { notification in
-                // App açıkken push'a tıklandı — UserDefaults'u temizle ki checkPending tekrar tetiklemesin
+                // Push tapped while app is open — clear UserDefaults to prevent re-trigger
                 UserDefaults.standard.removeObject(forKey: "deepLinkUserId")
                 if let senderId = notification.userInfo?["senderId"] as? String {
                     navigateToChat(userId: senderId)
@@ -131,27 +138,81 @@ struct ChatListView: View {
     
     // MARK: - Deeplink Navigation
     
-    /// UserDefaults'ta bekleyen deeplink var mı kontrol et (sadece cold launch için)
+    /// Check for pending deeplink in UserDefaults (cold launch only)
     private func checkPendingDeepLink() {
         if let pendingId = UserDefaults.standard.string(forKey: "deepLinkUserId") {
-            // Kullanıldı, temizle
+            // Already used, clear it
             UserDefaults.standard.removeObject(forKey: "deepLinkUserId")
             
-            // Kısa gecikme — view'ın tam yüklenmesini bekle
+            // Short delay — wait for view to fully load
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 navigateToChat(userId: pendingId)
             }
         }
     }
     
-    /// Belirtilen userId'ye ait chat'e navigate et
+    /// Navigate to the chat for the given userId
     private func navigateToChat(userId: String) {
-        // Zaten navigate ediyorsak tekrar etme
+        // Don't navigate again if already navigating
         guard navigationPath.isEmpty else { return }
         
-        // Users listesinde bu kullanıcıyı bul (ViewModel'den)
+        // Find user in the ViewModel's list
         if let chatUser = viewModel.users.first(where: { $0.id == userId }) {
             navigationPath.append(chatUser)
         }
+    }
+}
+
+#Preview("Full") {
+    ChatListView()
+        .environmentObject(DependencyContainer())
+        .modelContainer(for: MessageItem.self, inMemory: true)
+}
+
+#Preview("Mock Users") {
+    let mockUsers: [ChatUser] = [
+        ChatUser(id: "1", username: "kankiii", nickname: "Kankam", avatarName: "star.circle.fill", avatarUrl: nil),
+        ChatUser(id: "2", username: "ayse", nickname: "Ayşe", avatarName: "heart.circle.fill", avatarUrl: nil),
+        ChatUser(id: "3", username: "mehmet", nickname: nil, avatarName: "flame.circle", avatarUrl: nil),
+        ChatUser(id: "4", username: "zeynep", nickname: "Zey", avatarName: "moon.circle.fill", avatarUrl: nil),
+    ]
+    
+    NavigationStack {
+        List(mockUsers) { user in
+            HStack {
+                AvatarView(chatUser: user, size: 48)
+                    .padding(.trailing, 8)
+                    .foregroundColor(AppTheme.secondaryText)
+                
+                VStack(alignment: .leading) {
+                    Text(user.displayName)
+                        .font(.headline)
+                        .foregroundColor(AppTheme.white)
+                    
+                    Text("Click to start chatting")
+                        .font(.footnote)
+                        .foregroundColor(AppTheme.white)
+                }
+                
+                Spacer()
+                
+                // Mock unread badge
+                if user.id == "1" {
+                    Text("3")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(AppTheme.primary)
+                        .frame(minWidth: 30, minHeight: 30)
+                        .background(.white)
+                        .clipShape(Circle())
+                }
+            }
+            .padding(.vertical, 8)
+            .listRowBackground(AppTheme.backgroundLight)
+            .listRowSeparatorTint(AppTheme.white.opacity(0.1))
+        }
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.background)
+        .navigationTitle("Messages")
     }
 }

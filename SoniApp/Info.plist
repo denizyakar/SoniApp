@@ -5,10 +5,13 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>audio</string>
+		<string>voip</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Görüntülü konuşma yapabilmek için kamerana erişmemiz gerekiyor.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Sesli ve görüntülü konuşma için mikrofonuna erişmemiz gerekiyor.</string>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>SplashBackground</string>
+	</dict>
 </dict>
 </plist>

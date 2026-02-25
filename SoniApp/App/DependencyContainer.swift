@@ -2,63 +2,24 @@
 //  DependencyContainer.swift
 //  SoniApp
 //
-//  Merkezi bağımlılık yönetimi. Tüm servisler burada yaratılır
-//  ve ihtiyaç duyan sınıflara inject edilir.
-//
 
 import Foundation
 import SwiftData
 import Combine
 
-/// Uygulama genelindeki tüm bağımlılıkları yöneten merkezi container.
-///
-/// **Neden `@MainActor` YOK?**
-/// `@MainActor` tüm property'leri actor-isolated yapar.
-/// SwiftUI'nin `@StateObject` property wrapper'ı, dynamic member lookup
-/// ile property'lere erişir. Actor isolation bu mekanizmayı bozar:
-///   - `container.isAuthenticated` → actor-isolated property
-///   - SwiftUI → `ObservedObject.Wrapper.subscript(dynamicMember:)` dener
-///   - Sonuç: `Binding<Bool>` döner, `Bool` değil → compile hatası
-///
-/// SwiftUI View'ları zaten `@MainActor` üzerinde çalışır.
-/// Container'ın da `@MainActor` olmasına gerek yok.
 final class DependencyContainer: ObservableObject {
     
-    // MARK: - Forwarded Published Property
-    
-    /// **Nested ObservableObject Problemi ve Çözümü:**
-    ///
-    /// SwiftUI `@StateObject`/`@ObservedObject` sadece kendi objesinin
-    /// `@Published` property'lerini dinler. İç içe geçmiş ObservableObject'lerin
-    /// değişikliklerini otomatik izlemez.
-    ///
-    /// Örnek:
-    /// ```swift
-    /// // BU ÇALIŞMAZ — View güncellenmez:
-    /// if container.sessionStore.isAuthenticated { ... }
-    ///
-    /// // BU ÇALIŞIR — container'ın kendi @Published'ı:
-    /// if container.isAuthenticated { ... }
-    /// ```
-    ///
-    /// Combine ile `sessionStore.$isAuthenticated` → `self.$isAuthenticated` forward ediliyor.
+    /// Forwarded from SessionStore (nested ObservableObject won't trigger SwiftUI updates)
     @Published var isAuthenticated: Bool = false
     
-    // MARK: - Shared Services (App-scoped)
-    
-    /// Oturum bilgileri store'u
+    // MARK: - Shared Services
     let sessionStore: SessionStore
-    
-    /// Push notification token servisi
     let pushNotificationService: PushNotificationServiceProtocol
-    
-    /// Socket.io chat servisi
+    let voipPushService: VoIPPushServiceProtocol
     let chatService: SocketChatService
-    
-    /// App-wide pending mesaj retry servisi
     let retryService: PendingMessageRetryService
+    let callManager: CallManager
     
-    // MARK: - Private
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Init
@@ -66,24 +27,19 @@ final class DependencyContainer: ObservableObject {
     init() {
         self.sessionStore = SessionStore()
         self.pushNotificationService = PushNotificationService()
+        self.voipPushService = VoIPPushService()
         self.chatService = SocketChatService()
         self.retryService = PendingMessageRetryService(chatService: chatService, sessionStore: sessionStore)
+        self.callManager = CallManager(chatService: chatService)
         
-        // Başlangıç değerini senkronize et
         self.isAuthenticated = sessionStore.isAuthenticated
         
-        // SessionStore'un isAuthenticated değişikliğini container'a forward et.
-        // `assign(to:)` — Combine'ın publisher'ı doğrudan @Published property'ye
-        // bağlayan operatörü. Subscription, @Published property yaşadığı sürece devam eder.
-        // Ayrı bir `AnyCancellable` tutmaya gerek yok — `assign(to: &$prop)` bunu otomatik yapar.
+        // Forward auth state changes
         sessionStore.$isAuthenticated
             .receive(on: DispatchQueue.main)
             .assign(to: &$isAuthenticated)
         
-        // SessionStore'un HER değişikliğini (unreadCounts dahil) container'a forward et.
-        // Bu sayede ChatListView, sessionStore.unreadCounts değiştiğinde re-render olur.
-        // Nested ObservableObject problemi: SwiftUI sadece container'ın @Published'larını izler,
-        // sessionStore'un değişikliklerini görmez — bu forward bunu çözer.
+        // Forward all SessionStore changes for SwiftUI re-renders
         sessionStore.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -91,19 +47,22 @@ final class DependencyContainer: ObservableObject {
             }
             .store(in: &cancellables)
         
-        // Socket bağlantısını başlat
+        self.voipPushService.registerForVoIP()
+        
+        self.voipPushService.onIncomingPush = { [weak self] payload, completion in
+            self?.callManager.handleVoIPPush(payload: payload, completion: completion)
+        }
+        
         self.chatService.connect()
         
-        // Uygulama yeniden açıldığında push token'ı server'a gönder
-        // (Kullanıcı zaten login'se — token APNs'den gelmiş olabilir)
         sendPushTokenOnStartupIfNeeded()
     }
     
-    /// App restart sonrası push token'ı server'a gönder.
-    /// Login sırasında da gönderilir ama app kill+restart senaryosunda
-    /// bu metod catch-all görevi görür.
+    /// Send push token on app restart if user is already logged in.
     private func sendPushTokenOnStartupIfNeeded() {
-        guard let token = sessionStore.deviceToken,
+        // Read fresh from UserDefaults — token might have arrived after SessionStore init
+        let token = UserDefaults.standard.string(forKey: "deviceToken") ?? sessionStore.deviceToken
+        guard let token = token, !token.isEmpty,
               let username = sessionStore.currentUsername,
               sessionStore.isAuthenticated else { return }
         
@@ -114,14 +73,13 @@ final class DependencyContainer: ObservableObject {
         }
     }
     
-    // MARK: - Factory Methods
+    // MARK: - Factory
     
-    /// Auth işlemleri için servis yaratır.
-    /// Her çağrıda yeni instance döner (value semantics gibi davranır).
     func makeAuthService() -> AuthService {
         return AuthService(
             sessionStore: sessionStore,
-            pushNotificationService: pushNotificationService
+            pushNotificationService: pushNotificationService,
+            voipPushService: voipPushService
         )
     }
 }

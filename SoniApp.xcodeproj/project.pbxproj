@@ -7,11 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		877CF7553F3602479210E25D /* WebRTC.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 830DFD447BC4B5B9D71FDED8 /* WebRTC.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		93A8F91C8C9488BF42AA22FD /* WebRTC.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 830DFD447BC4B5B9D71FDED8 /* WebRTC.xcframework */; };
 		E97D19A52F263F6300B43D36 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = E97D19A42F263F6300B43D36 /* SocketIO */; };
-		E98DB4052F48B93700A28C14 /* LiveKitWebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = E98DB4042F48B93700A28C14 /* LiveKitWebRTC */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		A60C712CD57A81A09E97ADA0 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				877CF7553F3602479210E25D /* WebRTC.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		830DFD447BC4B5B9D71FDED8 /* WebRTC.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = WebRTC.xcframework; path = Frameworks/WebRTC.xcframework; sourceTree = "<group>"; };
 		E9582F132F24FBA000D1189A /* SoniApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SoniApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -41,19 +57,28 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E98DB4052F48B93700A28C14 /* LiveKitWebRTC in Frameworks */,
 				E97D19A52F263F6300B43D36 /* SocketIO in Frameworks */,
+				93A8F91C8C9488BF42AA22FD /* WebRTC.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A03F9983D14476F343110D00 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				830DFD447BC4B5B9D71FDED8 /* WebRTC.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = SOURCE_ROOT;
+		};
 		E9582F0A2F24FBA000D1189A = {
 			isa = PBXGroup;
 			children = (
 				E9582F152F24FBA000D1189A /* SoniApp */,
 				E9582F142F24FBA000D1189A /* Products */,
+				A03F9983D14476F343110D00 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -75,6 +100,7 @@
 				E9582F0F2F24FBA000D1189A /* Sources */,
 				E9582F102F24FBA000D1189A /* Frameworks */,
 				E9582F112F24FBA000D1189A /* Resources */,
+				A60C712CD57A81A09E97ADA0 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -86,7 +112,6 @@
 			name = SoniApp;
 			packageProductDependencies = (
 				E97D19A42F263F6300B43D36 /* SocketIO */,
-				E98DB4042F48B93700A28C14 /* LiveKitWebRTC */,
 			);
 			productName = ChatApp;
 			productReference = E9582F132F24FBA000D1189A /* SoniApp.app */;
@@ -100,7 +125,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2600;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					E9582F122F24FBA000D1189A = {
 						CreatedOnToolsVersion = 26.0.1;
@@ -118,7 +143,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				E97D19A32F263F6300B43D36 /* XCRemoteSwiftPackageReference "socket" */,
-				E98DB4032F48B93700A28C14 /* XCRemoteSwiftPackageReference "webrtc-xcframework" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E9582F142F24FBA000D1189A /* Products */;
@@ -189,7 +213,7 @@
 				DEVELOPMENT_TEAM = 8356NA7XBK;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -210,6 +234,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -253,7 +278,7 @@
 				DEVELOPMENT_TEAM = 8356NA7XBK;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -267,6 +292,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -279,11 +305,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SoniApp/SoniApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = 8356NA7XBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SoniApp/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Görüntülü konuşma yapabilmek için kamerana erişmemiz gerekiyor.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Sesli ve görüntülü konuşma için mikrofonuna erişmemiz gerekiyor.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -314,11 +342,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SoniApp/SoniApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = 8356NA7XBK;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SoniApp/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Görüntülü konuşma yapabilmek için kamerana erişmemiz gerekiyor.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Sesli ve görüntülü konuşma için mikrofonuna erişmemiz gerekiyor.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -374,14 +404,6 @@
 				kind = branch;
 			};
 		};
-		E98DB4032F48B93700A28C14 /* XCRemoteSwiftPackageReference "webrtc-xcframework" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/livekit/webrtc-xcframework";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 137.7151.13;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -389,11 +411,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E97D19A32F263F6300B43D36 /* XCRemoteSwiftPackageReference "socket" */;
 			productName = SocketIO;
-		};
-		E98DB4042F48B93700A28C14 /* LiveKitWebRTC */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E98DB4032F48B93700A28C14 /* XCRemoteSwiftPackageReference "webrtc-xcframework" */;
-			productName = LiveKitWebRTC;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

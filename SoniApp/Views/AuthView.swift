@@ -1,25 +1,13 @@
 //
 //  AuthView.swift
 //  SoniApp
-//
-//  DEĞİŞTİRİLDİ: AuthViewModel kullanıyor. UI AYNI KALDI.
-//
 
 import SwiftUI
 
-/// Login/Register ekranı.
-///
-/// **Ne değişti?**
-/// UI tasarımı AYNI KALDI — kullanıcı hiçbir fark görmeyecek.
-///
-/// İç yapıda:
-/// - `@State` ile tuttuğumuz state'ler → `@StateObject AuthViewModel`'e taşındı
-/// - `AuthManager.shared.login()` → `viewModel.handleAction()`
-/// - İş mantığı View'dan çıktı → ViewModel'e taşındı
 struct AuthView: View {
     @EnvironmentObject private var container: DependencyContainer
     
-    // Local state — ViewModel onAppear'da yaratılacak
+    // Local state
     @State private var isLoginMode = true
     @State private var username = ""
     @State private var password = ""
@@ -33,29 +21,35 @@ struct AuthView: View {
                 Text("Soni App")
                     .font(.system(size:44))
                     .bold()
-                    .foregroundColor(Color.blue)
+                    .foregroundColor(AppTheme.myBubble)
                 
                 Text(isLoginMode ? "Log In" : "Register")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .foregroundColor(AppTheme.white)
                     .padding(.bottom, 20)
                     .padding()
+                    
                 
                 // TextFields
-                TextField("Username", text: $username)
-                    .autocapitalization(.none)
+                TextField("", text: $username, prompt: Text("Username")
+                    .bold()
+                    .foregroundColor(AppTheme.secondaryText))
+                    .foregroundColor(AppTheme.white)
                     .textFieldStyle(.plain)
                     .padding(10)
                     .overlay(RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(.systemGray),lineWidth: 1)
+                    .stroke(AppTheme.inputBorder, lineWidth: 2)
                     )
                     .padding(.horizontal)
                     
-                SecureField("Password", text: $password)
+                SecureField("", text: $password, prompt: Text("Password")
+                    .bold()
+                    .foregroundColor(AppTheme.secondaryText))
                     .textFieldStyle(.plain)
                     .padding(10)
                     .overlay(RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color(.systemGray),lineWidth: 1)
+                        .stroke(AppTheme.inputBorder, lineWidth: 2)
                     )
                     .padding(.horizontal)
                     .padding(.bottom)
@@ -67,7 +61,7 @@ struct AuthView: View {
                             .tint(.white)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
+                            .background(AppTheme.primary)
                             .cornerRadius(12)
                     } else {
                         Text(isLoginMode ? "Log In" : "Register")
@@ -76,7 +70,7 @@ struct AuthView: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
+                            .background(AppTheme.primary)
                             .cornerRadius(12)
                     }
                 }
@@ -91,7 +85,7 @@ struct AuthView: View {
                 }) {
                     Text(isLoginMode ? "Don't have an account? Register" : "Already have an account? Log In")
                         .padding(.top)
-                        .foregroundColor(.blue)
+                        .foregroundColor(AppTheme.secondaryText)
                         .bold()
                 }
                 
@@ -106,15 +100,13 @@ struct AuthView: View {
             }
             .padding(.bottom)
             .padding(.bottom)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AppTheme.background.ignoresSafeArea())
         }
     }
     
     // MARK: - Actions
-    
-    /// Login/Register butonuna basıldığında çağrılır.
-    ///
-    /// **Eski hali:** `AuthManager.shared.login(username:pass:)` doğrudan çağrılıyordu.
-    /// **Yeni hali:** `container.makeAuthService()` ile servis yaratılıp kullanılıyor.
+
     private func handleAction() {
         isLoading = true
         let authService = container.makeAuthService()
@@ -148,4 +140,9 @@ struct AuthView: View {
             }
         }
     }
+}
+
+#Preview {
+    AuthView()
+        .environmentObject(DependencyContainer())
 }

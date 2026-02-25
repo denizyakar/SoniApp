@@ -2,16 +2,6 @@
 //  PendingMessageRetryService.swift
 //  SoniApp
 //
-//  App-wide bekleyen mesaj retry servisi.
-//  ChatViewModel'den bağımsız çalışır — hangi View açık olursa olsun
-//  socket reconnect olduğunda pending mesajları yeniden gönderir.
-//
-//  v3: Timer KALDIRILDI (sonsuz döngü + false-positive .sent sorunu).
-//      Retry şimdi sadece güvenilir anlarda tetikleniyor:
-//      1. Socket reconnect (connectionStatePublisher)
-//      2. App foreground (scenePhase.active)
-//      3. ChatView açılışı (onAppear)
-//
 
 import Foundation
 import Combine
@@ -19,11 +9,11 @@ import SwiftData
 
 /// App-wide pending mesaj retry servisi.
 ///
-/// **Neden timer kaldırıldı?**
-/// Timer her 5sn'de mesajları gönderiyordu ama server echo'su olmazsa
-/// mesajlar .pending kalıyor → sonsuz döngü. .sent olarak işaretlersek
-/// de socket emit sessizce başarısız olursa mesaj kayboluyordu.
-/// Timer yerine güvenilir tetikleyiciler kullanılıyor.
+/// **Why was the timer removed?**
+/// The timer sent messages every 5s, but without a server echo they
+/// stayed .pending → infinite loop. Marking as .sent risked silent
+/// message loss if socket emit failed.
+/// Reliable triggers are used instead.
 @MainActor
 final class PendingMessageRetryService {
     
@@ -38,14 +28,13 @@ final class PendingMessageRetryService {
         self.sessionStore = sessionStore
     }
     
-    /// ModelContext geldiğinde çağrılır (ilk View yüklendiğinde).
+    /// Called when ModelContext becomes available (first view load).
     func setup(modelContext: ModelContext) {
         guard !isSetUp else { return }
         isSetUp = true
         self.modelContext = modelContext
         
-        // Socket bağlantısı geldiğinde retry yap
-        // debounce: bağlantı flap'lerini (connect/disconnect/connect) birleştirir
+        // Debounce to handle connection flaps
         chatService.connectionStatePublisher
             .removeDuplicates()
             .filter { $0 == true }
@@ -56,7 +45,7 @@ final class PendingMessageRetryService {
             }
             .store(in: &cancellables)
         
-        // İlk setup'ta da bir kontrol yap
+        // Run initial check on setup
         if chatService.isConnected {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.retryAllPendingMessages()
@@ -64,7 +53,7 @@ final class PendingMessageRetryService {
         }
     }
     
-    /// Tüm pending/failed mesajları yeniden gönder.
+    /// Retry all pending/failed messages.
     func retryAllPendingMessages() {
         guard let modelContext = modelContext,
               let myId = sessionStore.currentUserId,
@@ -92,11 +81,10 @@ final class PendingMessageRetryService {
                     text: item.text,
                     senderId: item.senderId,
                     receiverId: item.receiverId,
-                    clientId: item.id
+                    clientId: item.id,
+                    imageUrl: item.imageUrl
                 )
                 
-                // .sent olarak işaretle — tekrar gönderilmesini önle.
-                // isConnected guard'ı socket'in bağlı olduğunu doğruluyor.
                 item.status = .sent
             }
             

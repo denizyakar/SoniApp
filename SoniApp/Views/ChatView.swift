@@ -1,14 +1,11 @@
 //  ChatView.swift
 //  SoniApp
-//
-//  DEĞİŞTİRİLDİ: Tarih separator + saat:dakika eklendi.
-//
 
 import SwiftUI
 import SwiftData
 import UIKit
 
-/// Mesajlaşma ekranı.
+/// Chat screen.
 struct ChatView: View {
     let user: ChatUser
     @EnvironmentObject private var container: DependencyContainer
@@ -17,7 +14,7 @@ struct ChatView: View {
     @Query private var messages: [MessageItem]
     @Environment(\.modelContext) private var context
     
-    // Feature 2.5: Info sheet için seçili mesaj
+    // Selected message for info sheet
     @State private var selectedMessageForInfo: MessageItem?
     
     // Feature 3: Photo Sharing
@@ -46,7 +43,7 @@ struct ChatView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
                             
-                            // Date Separator — gün değiştiğinde araya tarih yazısı
+                            // Date Separator — insert date label between days
                             if shouldShowDateSeparator(at: index) {
                                 DateSeparatorView(date: message.date)
                                     .padding(.vertical, 8)
@@ -83,7 +80,7 @@ struct ChatView: View {
                     }
                 }
                 .onAppear {
-                    // Chat açıldığında en son mesaja scroll et
+                    // Scroll to latest message when chat opens
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         if let lastId = messages.last?.id {
                             proxy.scrollTo(lastId, anchor: .bottom)
@@ -94,12 +91,32 @@ struct ChatView: View {
             
             inputArea
         }
+        .background(AppTheme.background.ignoresSafeArea())
         .toolbar {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {
                     AvatarView(chatUser: user, size: 28)
                     Text(user.displayName)
                         .font(.headline)
+                }
+            }
+            
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: {
+                    if let userId = container.sessionStore.currentUserId,
+                       let username = container.sessionStore.currentUsername {
+                        container.callManager.startCall(
+                            to: user.id,
+                            callerId: userId,
+                            callerName: container.sessionStore.currentDisplayName,
+                            callerAvatar: container.sessionStore.currentAvatarImageUrl?.absoluteString ?? "",
+                            calleeName: user.displayName,
+                            calleeAvatar: user.avatarImageUrl?.absoluteString ?? ""
+                        )
+                    }
+                }) {
+                    Image(systemName: "video.fill")
+                        .foregroundColor(AppTheme.white)
                 }
             }
         }
@@ -116,22 +133,22 @@ struct ChatView: View {
                 sessionStore: container.sessionStore
             )
             container.sessionStore.currentChatPartnerId = user.id
-            container.sessionStore.isInChatList = false  // Chat açıldı, artık ChatList'te değiliz
-            container.sessionStore.clearUnread(for: user.id)  // Okunmamış mesaj badge'ini temizle
+            container.sessionStore.isInChatList = false  // Chat opened, no longer in ChatList
+            container.sessionStore.clearUnread(for: user.id)  // Clear unread badge
             
-            // Pending mesajları tetikle — chat'e girince hemen retry
+            // Retry pending messages on chat open
             container.retryService.retryAllPendingMessages()
         }
         .onDisappear {
             container.sessionStore.currentChatPartnerId = nil
-            container.sessionStore.isInChatList = true  // Chat'ten çıkınca ChatList'e dönüyoruz
+            container.sessionStore.isInChatList = true  // Returning to ChatList
         }
     }
     
     // MARK: - Date Separator Logic
     
-    /// İlk mesajda her zaman separator göster.
-    /// Sonraki mesajlarda, önceki mesajla farklı günse separator göster.
+    /// Always show separator for the first message.
+    /// For subsequent messages, show separator if on a different day.
     private func shouldShowDateSeparator(at index: Int) -> Bool {
         if index == 0 { return true }
         
@@ -183,55 +200,60 @@ struct ChatView: View {
                     showImagePicker = true
                 }) {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(Color(.systemGray))
-                        .padding(.leading, 12)
+                        .font(.system(size: 20))
+                        .foregroundColor(AppTheme.primary)
+                        .padding(8)
+                        .background(AppTheme.white.opacity(0.85))
+                        .clipShape(Circle())
+                        .padding(.leading, 8)
                 }
                 .sheet(isPresented: $showImagePicker) {
                     ImagePicker(image: $inputImage)
                 }
-                // .onChange kaldırıldı — artık hemen göndermiyoruz
+                // .onChange removed — no longer sending immediately
                 
-                TextField("Type a message...", text: $viewModel.text, axis: .vertical) // axis: .vertical ile çok satırlı destek
+                TextField("", text: $viewModel.text, prompt: Text("Type a message...")
+                    .foregroundColor(AppTheme.white), axis: .vertical) // axis: .vertical for multi-line support
                     .padding(10)
                     .font(.system(size: 16))
                     .textFieldStyle(.plain)
+                    .foregroundColor(AppTheme.white)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color(.systemGray4), lineWidth: 1)
+                            .stroke(AppTheme.inputBorder, lineWidth: 2)
                     )
-                    .padding(.horizontal, 8)
+                    
                 
                 Button(action: {
-                    // Hem resim hem yazı gönder
+                    // Send both image and text
                     viewModel.sendMessage(image: inputImage)
-                    // Resmi temizle (yazıyı ViewModel temizliyor)
+                    // Clear image (text is cleared by ViewModel)
                     withAnimation {
                         inputImage = nil
                     }
                 }) {
                     Image(systemName: "paperplane.fill")
-                        .font(.system(size: 20)) // İkon boyutu
-                        .foregroundColor(.white)
+                        .font(.system(size: 20)) // Icon size
+                        .foregroundColor(AppTheme.primary)
                         .padding(10)
-                        .background(Color.blue)
+                        .background(AppTheme.white)
                         .clipShape(Circle())
                 }
                 .padding(.trailing, 12)
-                // Disable durumu: Hem yazı boş hem resim yoksa disable
+                // Disabled when both text is empty and no image selected
                 .disabled(viewModel.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && inputImage == nil)
                 .opacity((viewModel.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && inputImage == nil) ? 0.6 : 1.0)
             }
             .padding(.bottom, 8)
         }
-        .background(Color(.systemBackground)) // Klavye arkası
+        .background(AppTheme.background)
     }
 }
 
 // MARK: - Date Separator View
 
-/// Gün değişimlerinde mesajlar arasına eklenen tarih etiketi.
-/// WhatsApp tarzı: "Today", "Yesterday", "Monday", "Feb 6"
+/// Date label inserted between messages when the day changes.
+/// WhatsApp style: "Today", "Yesterday", "Monday", "Feb 6"
 struct DateSeparatorView: View {
     let date: Date
     
@@ -239,41 +261,40 @@ struct DateSeparatorView: View {
         Text(MessageDateFormatter.daySeparatorString(from: date))
             .font(.caption)
             .fontWeight(.semibold)
-            .foregroundColor(.secondary)
+            .foregroundColor(AppTheme.secondaryText)
             .padding(.horizontal, 16)
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill(Color(.systemGray6))
+                    .fill(AppTheme.dateBadge)
             )
     }
 }
 
 // MARK: - Message Bubble
 
-/// Mesaj baloncuğu — tüm özellikler: saat, isim, read receipt, offline status.
-/// Mesaj baloncuğu — tüm özellikler: saat, isim, avatar, read receipt, offline status.
+/// Message bubble — time, name, avatar, read receipt, offline status.
 struct MessageBubble: View {
     let message: MessageItem
     let currentUserId: String?
-    let senderDisplayName: String  // nickname varsa o, yoksa senderName
-    let senderAvatar: String       // SF Symbol adı
-    let senderAvatarUrl: URL?      // Fotoğraf URL'si (varsa)
+    let senderDisplayName: String  // nickname if available, otherwise senderName
+    let senderAvatar: String       // SF Symbol name
+    let senderAvatarUrl: URL?      // Profile photo URL (if any)
     
     private var isFromMe: Bool {
         message.isFromCurrentUser(userId: currentUserId)
     }
     
-    /// Offline queue — failed mesajlar soluk renkte
+    /// Offline queue — failed messages shown dimmed
     private var bubbleColor: Color {
         if isFromMe {
-            return message.status == .failed ? Color.gray : Color.blue
+            return message.status == .failed ? Color.gray : AppTheme.myBubble
         } else {
-            return Color(.systemGray5)
+            return AppTheme.incomingBubble
         }
     }
     
-    /// Failed mesajlar yarı saydam
+    /// Failed messages are semi-transparent
     private var bubbleOpacity: Double {
         message.status == .failed ? 0.6 : 1.0
     }
@@ -282,7 +303,7 @@ struct MessageBubble: View {
         HStack(alignment: .bottom, spacing: 6) {
             if isFromMe { Spacer() }
             
-            // Avatar — sadece karşıdan gelen mesajlarda
+            // Avatar — only for incoming messages
             if !isFromMe {
                 AvatarView(
                     imageUrl: senderAvatarUrl,
@@ -292,20 +313,20 @@ struct MessageBubble: View {
             }
             
             VStack(alignment: isFromMe ? .trailing : .leading, spacing: 2) {
-                // Sender name — sadece karşıdan gelen mesajlarda göster
+                // Sender name — only for incoming messages
                 if !isFromMe && !senderDisplayName.isEmpty {
                     Text(senderDisplayName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.blue)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(AppTheme.white)
                         .padding(.horizontal, 12)
                         .padding(.top, 6)
                 }
                 
-                // Mesaj İçeriği: Resim ve/veya Metin
+                // Message Content: Image and/or Text
                 VStack(alignment: .leading, spacing: 4) {
-                    // Resim varsa göster
+                    // Show image if available
                     if let imageUrl = message.imageUrl, !imageUrl.isEmpty {
-                        // URL Oluşturma: Local file (pending) veya Remote URL
+                        // URL: Local file (pending) or Remote URL
                         let url: URL? = {
                             if imageUrl.hasPrefix("file://") {
                                 return URL(string: imageUrl)
@@ -327,10 +348,10 @@ struct MessageBubble: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding(.top, 4)
                         .padding(.horizontal, 4)
-                        // Kendi mesajımsa sağa, onunki sola (gerçi bubble zaten hizalı)
+                        // Alignment (bubble already handles this)
                     }
                     
-                    // Metin varsa göster
+                    // Show text if available
                     if !message.text.isEmpty {
                         Text(message.text)
                             .padding(.horizontal, 12)
@@ -339,9 +360,9 @@ struct MessageBubble: View {
                     }
                 }
                 
-                // Alt satır: Saat + Read/Status durumu
+                // Bottom row: Time + Read/Status
                 HStack(spacing: 4) {
-                    // Failed mesaj durumu
+                    // Failed message status
                     if isFromMe && message.status == .failed {
                         Image(systemName: "exclamationmark.circle.fill")
                             .font(.system(size: 11))
@@ -356,9 +377,9 @@ struct MessageBubble: View {
                     } else {
                         Text(MessageDateFormatter.timeString(from: message.date))
                             .font(.system(size: 11))
-                            .foregroundColor(isFromMe ? .white.opacity(0.7) : .gray)
+                            .foregroundColor(isFromMe ? .white.opacity(0.7) : .white.opacity(0.7))
                         
-                        // "Read, 13:30" — sadece kendi mesajlarımda, okunduysa
+                        // "Read" — only my messages, when read
                         if isFromMe && message.isRead, message.readAt != nil {
                             Text("· Read")
                                 .font(.system(size: 11))
@@ -370,7 +391,7 @@ struct MessageBubble: View {
                 .padding(.bottom, 6)
             }
             .background(bubbleColor)
-            .foregroundColor(isFromMe ? .white : .primary)
+            .foregroundColor(.white)
             .opacity(bubbleOpacity)
             .cornerRadius(16)
             .frame(maxWidth: 280, alignment: isFromMe ? .trailing : .leading)
@@ -381,4 +402,52 @@ struct MessageBubble: View {
         .padding(.vertical, 2)
         .id(message.id)
     }
+}
+
+#Preview("Chat - Full") {
+    let mockUser = ChatUser(
+        id: "mock-user-1",
+        username: "kankiii",
+        nickname: "Kankam",
+        avatarName: "star.circle.fill",
+        avatarUrl: nil
+    )
+    
+    NavigationStack {
+        ChatView(user: mockUser)
+    }
+    .environmentObject(DependencyContainer())
+    .modelContainer(for: MessageItem.self, inMemory: true)
+}
+
+#Preview("Message Bubbles") {
+    let myId = "me"
+    
+    VStack(spacing: 8) {
+        MessageBubble(
+            message: MessageItem(id: "1", text: "Selam kanka!", senderId: myId, receiverId: "other", date: Date()),
+            currentUserId: myId,
+            senderDisplayName: "",
+            senderAvatar: "person.circle",
+            senderAvatarUrl: nil
+        )
+        
+        MessageBubble(
+            message: MessageItem(id: "2", text: "Hey, how are you?", senderId: "other", receiverId: myId, date: Date()),
+            currentUserId: myId,
+            senderDisplayName: "Kankam",
+            senderAvatar: "star.circle.fill",
+            senderAvatarUrl: nil
+        )
+        
+        MessageBubble(
+            message: MessageItem(id: "3", text: "Good, you?", senderId: myId, receiverId: "other", date: Date(), isRead: true, readAt: Date()),
+            currentUserId: myId,
+            senderDisplayName: "",
+            senderAvatar: "person.circle",
+            senderAvatarUrl: nil
+        )
+    }
+    .padding()
+    .background(AppTheme.background)
 }

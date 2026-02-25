@@ -13,7 +13,7 @@ struct ImagePicker: UIViewControllerRepresentable {
     @Binding var image: UIImage?
     @Environment(\.presentationMode) var presentationMode
     
-    // Coordinator sınıfı: UIKit delegate olaylarını dinler
+    // Coordinator class: listens to UIKit delegate events
     class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
         let parent: ImagePicker
         
@@ -22,11 +22,11 @@ struct ImagePicker: UIViewControllerRepresentable {
         }
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            // "editedImage" kullanıcının kırptığı karedir
+            // "editedImage" is the user's cropped version
             if let uiImage = info[.editedImage] as? UIImage {
                 parent.image = uiImage
             } else if let uiImage = info[.originalImage] as? UIImage {
-                // Kırpma yapılmadıysa orijinali al
+                // If no crop was made, use original
                 parent.image = uiImage
             }
             
@@ -45,7 +45,7 @@ struct ImagePicker: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.delegate = context.coordinator
-        picker.allowsEditing = true // <--- Sihirli satır: Kırpma ekranını açar
+        picker.allowsEditing = true // Enables crop screen
         picker.sourceType = .photoLibrary
         return picker
     }

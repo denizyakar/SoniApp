@@ -2,16 +2,12 @@
 //  UserRepository.swift
 //  SoniApp
 //
-//  Kullanıcı verisi koordinasyonu: Network → SwiftData.
-//  Eskiden bu mantık ChatListViewModel + AuthManager içinde dağınıktı.
-//
 
 import Foundation
 import SwiftData
 
 // MARK: - Protocol
 
-/// Kullanıcı veri operasyonlarının sözleşmesi.
 protocol UserRepositoryProtocol {
     @discardableResult
     func syncUsersFromServer(authService: AuthService, sessionStore: SessionStoreProtocol) async throws -> [ChatUser]
@@ -19,16 +15,6 @@ protocol UserRepositoryProtocol {
 
 // MARK: - Implementation
 
-/// SwiftData tabanlı kullanıcı repository'si.
-///
-/// **Eskiden ne oluyordu?**
-/// 1. `ChatListViewModel.fetchUsers()` → `AuthManager.shared.fetchAllUsers()`
-/// 2. `AuthManager` kullanıcıları çekip callback ile geri dönüyordu
-/// 3. ViewModel callback'te `saveUsersToDB()` çağırıyordu
-///
-/// **Şimdi ne oluyor?**
-/// `UserRepository` tek başına hem çekme hem kaydetme işini hallediyor.
-/// ViewModel sadece `try await repository.syncUsersFromServer()` diyor.
 @MainActor
 final class UserRepository: UserRepositoryProtocol {
     
@@ -38,10 +24,8 @@ final class UserRepository: UserRepositoryProtocol {
         self.modelContext = modelContext
     }
     
-    /// Sunucudan tüm kullanıcıları çeker, lokal DB'ye kaydeder ve unread count'ları günceller.
     @discardableResult
     func syncUsersFromServer(authService: AuthService, sessionStore: SessionStoreProtocol) async throws -> [ChatUser] {
-        // Callback-based API'yi async/await'e çeviriyoruz (bridge)
         let users: [ChatUser] = try await withCheckedThrowingContinuation { continuation in
             authService.fetchAllUsers { result in
                 switch result {
@@ -64,7 +48,7 @@ final class UserRepository: UserRepositoryProtocol {
             )
             modelContext.insert(userItem)
             
-            // YENİ: Backend'den gelen okunmamış mesaj sayısını SessionStore'a yaz
+            // Update unread counts from server
             if let unreadCount = user.unreadCount {
                 sessionStore.unreadCounts[user.id] = unreadCount
             }
@@ -75,7 +59,6 @@ final class UserRepository: UserRepositoryProtocol {
         return users
     }
     
-    /// Kullanıcı profilini güncelle (real-time socket event'ten)
     func updateUserProfile(userId: String, nickname: String, avatarName: String, avatarUrl: String = "") throws {
         let predicate = #Predicate<UserItem> { item in
             item.id == userId
@@ -86,8 +69,7 @@ final class UserRepository: UserRepositoryProtocol {
             userItem.nickname = nickname
             userItem.avatarName = avatarName
             if !avatarUrl.isEmpty {
-                // Cache-buster: URL değişmiş gibi göstermek için timestamp ekle
-                // Böylece AsyncImage eski fotoğrafı kullanmaz, yenisini indirir.
+                // Cache-buster timestamp to force AsyncImage refresh
                 let separator = avatarUrl.contains("?") ? "&" : "?"
                 let timestamp = Date().timeIntervalSince1970
                 userItem.avatarUrl = "\(avatarUrl)\(separator)t=\(timestamp)"

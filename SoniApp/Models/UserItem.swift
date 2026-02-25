@@ -16,12 +16,11 @@ class UserItem {
     var nickname: String
     var avatarUrl: String
     
-    /// Görüntülenecek isim: nickname varsa onu, yoksa username'i göster
+    /// Display nickname if set, otherwise username
     var displayName: String {
         nickname.isEmpty ? username : nickname
     }
     
-    /// Profil fotoğrafı tam URL'si (varsa)
     var avatarImageUrl: URL? {
         guard !avatarUrl.isEmpty else { return nil }
         if avatarUrl.hasPrefix("http") { return URL(string: avatarUrl) }

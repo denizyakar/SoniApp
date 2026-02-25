@@ -2,12 +2,12 @@
 //  UserProfileView.swift
 //  SoniApp
 //
-//  Kullanıcı profil ekranı: avatar seçimi (galeri + SF Symbol) ve nickname değiştirme.
+//  User profile screen: avatar selection (gallery + SF Symbol) and nickname editing.
 //
 
 import SwiftUI
 import SwiftUI
-// import PhotosUI - Artık gerek yok
+// import PhotosUI - No longer needed
 
 struct UserProfileView: View {
     @EnvironmentObject private var container: DependencyContainer
@@ -16,7 +16,7 @@ struct UserProfileView: View {
     @State private var nickname: String = ""
     @State private var selectedAvatar: String = "person.circle"
     
-    // YENİ: Fotoğraf seçimi için state'ler (ImagePicker için)
+    // Photo picker states (for ImagePicker)
     @State private var showImagePicker = false
     @State private var inputImage: UIImage?
     @State private var selectedImageData: Data?
@@ -25,7 +25,7 @@ struct UserProfileView: View {
     @State private var isSaving = false
     @State private var statusMessage = ""
     
-    /// Kullanılabilir avatar seçenekleri (SF Symbols)
+    /// Available avatar options (SF Symbols)
     let avatarOptions = [
         "person.circle", "person.circle.fill",
         "face.smiling", "face.smiling.inverse",
@@ -45,19 +45,17 @@ struct UserProfileView: View {
         NavigationView {
             Form {
                 // MARK: - Avatar Preview & Selection
-                Section("Avatar") {
+                Section {
                     VStack {
-                        // Büyük önizleme
+                        // Large preview
                         if let data = selectedImageData, let uiImage = UIImage(data: data) {
-                            // Galeriden yeni seçilen (henüz upload edilmemiş)
                             Image(uiImage: uiImage)
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                                 .frame(width: 100, height: 100)
                                 .clipShape(Circle())
-                                .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                                .overlay(Circle().stroke(AppTheme.primary, lineWidth: 2))
                         } else if !avatarUrl.isEmpty {
-                            // Server'daki mevcut fotoğraf
                             AsyncImage(url: URL(string: "\(APIEndpoints.baseURL)\(avatarUrl)")) { image in
                                 image
                                     .resizable()
@@ -67,23 +65,22 @@ struct UserProfileView: View {
                             }
                             .frame(width: 100, height: 100)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.blue, lineWidth: 2))
+                            .overlay(Circle().stroke(AppTheme.primary, lineWidth: 2))
                         } else {
-                            // SF Symbol
                             Image(systemName: selectedAvatar)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 100, height: 100)
-                                .foregroundColor(.blue)
+                                .foregroundColor(AppTheme.white)
                         }
                         
-                        // Fotoğraf Seç Butonu (Kırpma Özellikli)
                         Button {
                             showImagePicker = true
                         } label: {
                             Label("Select Photo", systemImage: "photo.on.rectangle")
                                 .font(.headline)
                                 .padding(.vertical, 4)
+                                .foregroundColor(AppTheme.white)
                         }
                         .padding(.top, 8)
                         .sheet(isPresented: $showImagePicker) {
@@ -94,12 +91,7 @@ struct UserProfileView: View {
                     .listRowBackground(Color.clear)
                     .onChange(of: inputImage) { _, newImage in
                         if let newImage = newImage {
-                            // ImagePicker zaten kırpılmış (edited) kare fotoğrafı döndürüyor.
-                            // Yine de boyutunu standardize etmek (256x256) ve sıkıştırmak iyi olur.
                             if let data = newImage.jpegData(compressionQuality: 0.8) {
-                                // Resize işlemi processImage içinde yapılıyor, oraya gönderelim
-                                // processImage Data alıyor, o yüzden önce data yaptık.
-                                // Aslında processImage UIImage alsa daha verimli olurdu ama mevcut yapıyı bozmayalım.
                                 if let compressed = processImage(data: data) {
                                     selectedImageData = compressed
                                 }
@@ -107,15 +99,10 @@ struct UserProfileView: View {
                         }
                     }
                     
-                    // SF Symbol Grid (Sadece fotoğraf seçilmediyse veya iptal edilmek istenirse?)
-                    // Hem fotoğraf hem symbol seçilebilir, fotoğraf varsa fotoğraf önceliklidir.
-                    // Fotoğrafı iptal etmek için bir buton ekleyebiliriz veya symbol seçince fotoğrafı silebiliriz.
-                    
                     if selectedImageData != nil || !avatarUrl.isEmpty {
                         Button(role: .destructive) {
                             selectedImageData = nil
                             avatarUrl = ""
-                            // Varsayılana dön
                             selectedAvatar = "person.circle"
                         } label: {
                             Label("Remove Photo", systemImage: "trash")
@@ -123,50 +110,60 @@ struct UserProfileView: View {
                         }
                     }
                     
-                    // Avatar grid
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
                         ForEach(avatarOptions, id: \.self) { avatar in
                             Image(systemName: avatar)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 32, height: 32)
-                                .foregroundColor(selectedAvatar == avatar ? .blue : .gray)
+                                .foregroundColor(selectedAvatar == avatar ? AppTheme.primary : AppTheme.white)
                                 .padding(8)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(selectedAvatar == avatar ? Color.blue.opacity(0.15) : Color.clear)
+                                        .fill(selectedAvatar == avatar ? AppTheme.secondaryText.opacity(0.6) : Color.clear)
                                 )
                                 .onTapGesture {
                                     selectedAvatar = avatar
-                                    // Symbol seçince fotoğrafı temizle
                                     selectedImageData = nil
                                     avatarUrl = ""
                                 }
                         }
                     }
                     .padding(.top, 8)
+                } header: {
+                    Text("Avatar")
+                        .foregroundColor(AppTheme.white)
                 }
+                .listRowBackground(AppTheme.backgroundLight)
+                .listRowSeparator(.hidden)
                 
                 // MARK: - Nickname
-                Section("Nickname") {
-                    TextField("Enter nickname", text: $nickname)
+                Section {
+                    TextField("", text: $nickname, prompt: Text("Enter nickname").foregroundColor(AppTheme.secondaryText))
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
+                        .foregroundColor(AppTheme.white)
                     
                     Text("This will be displayed instead of your username.")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(AppTheme.secondaryText)
+                } header: {
+                    Text("Nickname")
+                        .foregroundColor(AppTheme.white)
                 }
+                .listRowBackground(AppTheme.backgroundLight)
                 
                 // MARK: - Bilgi
                 Section {
                     HStack {
                         Text("Username")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(AppTheme.secondaryText)
                         Spacer()
                         Text(container.sessionStore.currentUsername ?? "—")
+                            .foregroundColor(AppTheme.white)
                     }
                 }
+                .listRowBackground(AppTheme.backgroundLight)
                 
                 // MARK: - Kaydet
                 Section {
@@ -178,6 +175,7 @@ struct UserProfileView: View {
                             } else {
                                 Text("Save")
                                     .fontWeight(.semibold)
+                                    .foregroundColor(AppTheme.white)
                             }
                             Spacer()
                         }
@@ -190,16 +188,20 @@ struct UserProfileView: View {
                             .foregroundColor(statusMessage.contains("✅") ? .green : .red)
                     }
                 }
+                .listRowBackground(AppTheme.backgroundLight)
             }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.background)
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .foregroundColor(AppTheme.white)
                 }
             }
             .onAppear {
-                // Mevcut değerleri yükle
+                // Load current values
                 nickname = container.sessionStore.currentNickname ?? ""
                 selectedAvatar = container.sessionStore.currentAvatarName ?? "person.circle"
                 avatarUrl = container.sessionStore.currentAvatarUrl ?? ""
@@ -209,7 +211,7 @@ struct UserProfileView: View {
     
     // MARK: - Helpers
     
-    /// Fotoğrafı resize ve compress et (~30-80KB hedefleniyor)
+    /// Resize and compress photo (~30-80KB target)
     private func processImage(data: Data) -> Data? {
         guard let image = UIImage(data: data) else { return nil }
         
@@ -235,7 +237,7 @@ struct UserProfileView: View {
         isSaving = true
         statusMessage = ""
         
-        // Multipart request oluştur
+        // Build multipart request
         let url = APIEndpoints.updateProfile(userId: userId)
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
@@ -251,7 +253,7 @@ struct UserProfileView: View {
         body.append("\(nickname)\r\n".data(using: .utf8)!)
         
         // 2. AvatarName field (SF Symbol)
-        // Eğer fotoğraf varsa avatarName'i de gönderiyoruz ama öncelik url'de olacak
+        // If photo exists, also send avatarName but priority is URL
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"avatarName\"\r\n\r\n".data(using: .utf8)!)
         body.append("\(selectedAvatar)\r\n".data(using: .utf8)!)
@@ -264,7 +266,7 @@ struct UserProfileView: View {
             body.append(imageData)
             body.append("\r\n".data(using: .utf8)!)
         } else {
-             // Fotoğraf yoksa (SF Symbol kullanılıyorsa) URL'i temizlemek için boş string gönde.
+             // If no photo (using SF Symbol), send empty string to clear URL.
              body.append("--\(boundary)\r\n".data(using: .utf8)!)
              body.append("Content-Disposition: form-data; name=\"avatarUrl\"\r\n\r\n".data(using: .utf8)!)
              body.append("\r\n".data(using: .utf8)!)
@@ -297,8 +299,8 @@ struct UserProfileView: View {
                         let urlRaw = userDict["avatarUrl"] as? String ?? ""
                         var finalUrl = urlRaw
                         
-                        // YENİ: Eğer fotoğraf yoksa (SF Symbol seçildiyse) anında temizle.
-                        // Backend bazen eski URL'i dönebiliyor olabilir, onu override edelim.
+                        // If no photo (SF Symbol selected), clear immediately.
+                        // Backend may return old URL, so we override it.
                         if selectedImageData == nil {
                             finalUrl = ""
                         } else if !finalUrl.isEmpty {
@@ -306,10 +308,10 @@ struct UserProfileView: View {
                             finalUrl = "\(finalUrl)\(separator)t=\(Date().timeIntervalSince1970)"
                         }
                         
-                        // Lokal güncelleme
+                        // Local update
                         container.sessionStore.currentNickname = nickname
                         container.sessionStore.currentAvatarName = selectedAvatar
-                        container.sessionStore.currentAvatarUrl = finalUrl // <-- Cache-buster'lı URL kullan!
+                        container.sessionStore.currentAvatarUrl = finalUrl // Use cache-busted URL
                         
                         // Socket broadcast
                         container.chatService.emitProfileUpdate(
@@ -331,4 +333,9 @@ struct UserProfileView: View {
             }
         }.resume()
     }
+}
+
+#Preview {
+    UserProfileView()
+        .environmentObject(DependencyContainer())
 }
