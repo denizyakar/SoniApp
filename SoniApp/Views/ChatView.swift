@@ -21,6 +21,13 @@ struct ChatView: View {
     @State private var showImagePicker = false
     @State private var inputImage: UIImage?
     
+    // Avatar Overlay State (profile pic)
+    @State private var isShowingOverlay = false
+    
+    // Image Overlay State (chat photos)
+    @State private var isShowingImageOverlay = false
+    @State private var imageOverlayUrl: URL?
+    
     init(user: ChatUser) {
         self.user = user
         
@@ -36,8 +43,9 @@ struct ChatView: View {
     }
     
     var body: some View {
-        VStack {
-            // Message List
+        ZStack {
+            VStack {
+                // Message List
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -54,7 +62,18 @@ struct ChatView: View {
                                 currentUserId: container.sessionStore.currentUserId,
                                 senderDisplayName: user.displayName,
                                 senderAvatar: user.avatar,
-                                senderAvatarUrl: user.avatarImageUrl
+                                senderAvatarUrl: user.avatarImageUrl,
+                                onAvatarTap: {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        isShowingOverlay = true
+                                    }
+                                },
+                                onImageTap: { url in
+                                    imageOverlayUrl = url
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                        isShowingImageOverlay = true
+                                    }
+                                }
                             )
                             .contextMenu {
                                 Button(role: .destructive) {
@@ -96,6 +115,11 @@ struct ChatView: View {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {
                     AvatarView(chatUser: user, size: 28)
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                isShowingOverlay = true
+                            }
+                        }
                     Text(user.displayName)
                         .font(.headline)
                 }
@@ -142,6 +166,18 @@ struct ChatView: View {
         .onDisappear {
             container.sessionStore.currentChatPartnerId = nil
             container.sessionStore.isInChatList = true  // Returning to ChatList
+        }
+            
+            FullScreenAvatarOverlay(
+                isPresented: $isShowingOverlay,
+                imageUrl: user.avatarImageUrl,
+                sfSymbol: user.avatar
+            )
+            
+            FullScreenImageOverlay(
+                isPresented: $isShowingImageOverlay,
+                imageUrl: imageOverlayUrl
+            )
         }
     }
     
@@ -280,6 +316,8 @@ struct MessageBubble: View {
     let senderDisplayName: String  // nickname if available, otherwise senderName
     let senderAvatar: String       // SF Symbol name
     let senderAvatarUrl: URL?      // Profile photo URL (if any)
+    var onAvatarTap: (() -> Void)? = nil
+    var onImageTap: ((URL?) -> Void)? = nil
     
     private var isFromMe: Bool {
         message.isFromCurrentUser(userId: currentUserId)
@@ -310,6 +348,9 @@ struct MessageBubble: View {
                     sfSymbol: senderAvatar,
                     size: 28
                 )
+                .onTapGesture {
+                    onAvatarTap?()
+                }
             }
             
             VStack(alignment: isFromMe ? .trailing : .leading, spacing: 2) {
@@ -348,6 +389,9 @@ struct MessageBubble: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .padding(.top, 4)
                         .padding(.horizontal, 4)
+                        .onTapGesture {
+                            onImageTap?(url)
+                        }
                         // Alignment (bubble already handles this)
                     }
                     

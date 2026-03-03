@@ -108,9 +108,6 @@ final class WebRTCClient: NSObject {
                     let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                     let maxFps = format.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 30
                     let fps = min(maxFps, 30) // Cap at 30fps to save battery
-                    
-                    self.videoSource?.adaptOutputFormat(toWidth: dims.width, height: dims.height, fps: Int32(fps))
-                    
                     capturer.startCapture(with: frontCamera, format: format, fps: Int(fps))
                     print("[WebRTC] Front camera started: \(dims.width)x\(dims.height) @ \(Int(fps))fps")
                 }
@@ -120,30 +117,13 @@ final class WebRTCClient: NSObject {
         let videoTrack = WebRTCClient.factory.videoTrack(with: videoSource, trackId: "video0")
         self.localVideoTrack = videoTrack
         self.peerConnection.add(videoTrack, streamIds: ["stream0"])
-        
-        // Force high bitrate to prevent aggressive downscaling
-        setMaxBitrate()
-    }
-    
-    private func setMaxBitrate() {
-        for sender in peerConnection.senders {
-            if sender.track?.kind == "video" {
-                let parameters = sender.parameters
-                for encoding in parameters.encodings {
-                    // Force up to 4 Mbps to allow crystal clear 1080p without compression artifacts
-                    encoding.maxBitrateBps = 4_000_000 as NSNumber
-                }
-                sender.parameters = parameters
-                print("[WebRTC] Video max bitrate explicitly set to 4 Mbps")
-            }
-        }
     }
     
     // MARK: - Camera Controls
     
     private func selectBestFormat(for camera: AVCaptureDevice) -> AVCaptureDevice.Format? {
-        // Target 1080p (1920x1080) for highest quality
-        let targetWidth: Int32 = 1920
+        // Target 720p (1280x720) — industry standard for mobile video calls
+        let targetWidth: Int32 = 1280
         let formats = RTCCameraVideoCapturer.supportedFormats(for: camera)
         
         let bestFormat = formats.sorted { f1, f2 in
@@ -175,10 +155,7 @@ final class WebRTCClient: NSObject {
            let format = selectBestFormat(for: camera) {
             
             let maxFps = format.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 30
-            let fps = min(maxFps, 30) // Cap at 30fps to save battery while preserving 1080p res
-            
-            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            self.videoSource?.adaptOutputFormat(toWidth: dims.width, height: dims.height, fps: Int32(fps))
+            let fps = min(maxFps, 30)
             
             // Must stop current camera before starting another — AVCaptureSession will crash otherwise
             capturer.stopCapture {
