@@ -38,8 +38,8 @@ struct ChatAppApp: App {
     }
 }
 
-/// Main routing view. Observes `CallManager` directly to trigger
-/// re-rendering when call state (isCallActive) changes.
+/// Main routing view. Observes `CallManager.callPhase` to show
+/// the call screen via fullScreenCover when a call is in progress.
 struct RootView: View {
     @EnvironmentObject var container: DependencyContainer
     @EnvironmentObject var callManager: CallManager
@@ -52,17 +52,24 @@ struct RootView: View {
                 AuthView()
             }
         }
-        .fullScreenCover(isPresented: $callManager.isCallActive) {
+        .fullScreenCover(isPresented: Binding(
+            get: { callManager.callPhase.shouldShowCallScreen },
+            set: { newValue in
+                if !newValue {
+                    callManager.dismissCall()
+                }
+            }
+        )) {
             if let data = callManager.incomingCallData,
                let opponentId = data["callerId"] as? String,
                let callerName = data["callerName"] as? String,
                let avatarUrl = data["callerAvatarUrl"] as? String {
-                CallView(opponentId: opponentId, opponentName: callerName, opponentAvatarUrl: avatarUrl, isPresented: $callManager.isCallActive)
+                CallView(opponentId: opponentId, opponentName: callerName, opponentAvatarUrl: avatarUrl)
             } else {
                 let outId = container.callManager.currentOpponentId ?? "Unknown"
                 let outName = container.callManager.outgoingOpponentName ?? "Unknown"
                 let outAvatar = container.callManager.outgoingOpponentAvatarUrl ?? ""
-                CallView(opponentId: outId, opponentName: outName, opponentAvatarUrl: outAvatar, isPresented: $callManager.isCallActive)
+                CallView(opponentId: outId, opponentName: outName, opponentAvatarUrl: outAvatar)
             }
         }
     }
