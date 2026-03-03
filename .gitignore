@@ -22,6 +22,6 @@ DerivedData/
 .build/
 
 
-*.p8                 # Apple Push Notification Anahtarı (EN ÖNEMLİSİ)
-Secrets.swift        # Eğer şifre tuttuğun özel bir dosya varsa
-GoogleService-Info.plist  # Firebase varsa
+*.p8                
+Secrets.swift       
+GoogleService-Info.plist  
