@@ -3,31 +3,31 @@ import Combine
 import WebRTC
 import UIKit
 
-final class CallManager: ObservableObject {
+enum CallPhase: Equatable {
+    case idle
+    case outgoingRinging
+    case incomingRinging
+    case connecting
+    case active
+    case ended
+    case failed(reason: String)
     
-    enum CallPhase: Equatable {
-        case idle
-        case outgoingRinging
-        case incomingRinging
-        case connecting
-        case active
-        case ended
-        case failed(reason: String)
-        
-        var isInCall: Bool {
-            switch self {
-            case .idle, .ended, .failed: return false
-            default: return true
-            }
-        }
-        
-        var shouldShowCallScreen: Bool {
-            switch self {
-            case .idle, .ended: return false
-            default: return true
-            }
+    var isInCall: Bool {
+        switch self {
+        case .idle, .ended, .failed: return false
+        default: return true
         }
     }
+    
+    var shouldShowCallScreen: Bool {
+        switch self {
+        case .idle, .ended: return false
+        default: return true
+        }
+    }
+}
+
+final class CallManager: ObservableObject {
     
     @Published var callPhase: CallPhase = .idle
     @Published var incomingCallData: [String: Any]? = nil

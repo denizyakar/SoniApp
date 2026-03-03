@@ -19,8 +19,14 @@ struct ChatListView: View {
     @State private var navigationPath = NavigationPath()
     @State private var showingProfile = false
     
+    // Avatar Overlay State
+    @State private var isShowingOverlay = false
+    @State private var overlayImageUrl: URL?
+    @State private var overlaySfSymbol: String = "person.circle"
+    
     var body: some View {
-        NavigationStack(path: $navigationPath) {
+        ZStack {
+            NavigationStack(path: $navigationPath) {
             List(viewModel.filteredUsers) { user in
                 
                 let chatUserStruct = user
@@ -29,6 +35,13 @@ struct ChatListView: View {
                     HStack {
                         AvatarView(chatUser: chatUserStruct, size: 48)
                             .padding(.trailing, 8)
+                            .onTapGesture {
+                                overlayImageUrl = chatUserStruct.avatarImageUrl
+                                overlaySfSymbol = chatUserStruct.avatar
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    isShowingOverlay = true
+                                }
+                            }
                         
                         VStack(alignment: .leading) {
                             Text(user.displayName)
@@ -133,6 +146,13 @@ struct ChatListView: View {
                     navigateToChat(userId: senderId)
                 }
             }
+        } // Ending NavigationStack
+            
+        FullScreenAvatarOverlay(
+            isPresented: $isShowingOverlay,
+            imageUrl: overlayImageUrl,
+            sfSymbol: overlaySfSymbol
+        )
         }
     }
     
