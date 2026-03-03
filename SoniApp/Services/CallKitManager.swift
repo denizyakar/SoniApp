@@ -29,9 +29,10 @@ final class CallKitManager: NSObject {
         providerConfiguration.supportedHandleTypes = [.generic]
         
         self.provider = CXProvider(configuration: providerConfiguration)
-        
         super.init()
-        
+    }
+    
+    func setup() {
         self.provider.setDelegate(self, queue: nil)
     }
     
@@ -106,28 +107,35 @@ final class CallKitManager: NSObject {
 
 extension CallKitManager: CXProviderDelegate {
     
-    func providerDidReset(_ provider: CXProvider) {}
+    func providerDidReset(_ provider: CXProvider) {
+        print("[CallKit] Provider did reset")
+    }
     
     func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
+        print("[CallKit] Start call action performed")
         action.fulfill()
     }
     
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+        print("[CallKit] Answer call action — user accepted from CallKit UI")
         delegate?.callKitDidAnswerCall(uuid: action.callUUID)
         action.fulfill()
     }
     
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+        print("[CallKit] End call action — user ended from CallKit UI")
         delegate?.callKitDidEndCall(uuid: action.callUUID)
         action.fulfill()
     }
     
     func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+        print("[CallKit] Audio session ACTIVATED")
         RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
         RTCAudioSession.sharedInstance().isAudioEnabled = true
     }
     
     func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+        print("[CallKit] Audio session DEACTIVATED")
         RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
         RTCAudioSession.sharedInstance().isAudioEnabled = false
     }

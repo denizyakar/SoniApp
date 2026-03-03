@@ -32,6 +32,7 @@ final class WebRTCClient: NSObject {
 
     
     var videoCapturer: RTCVideoCapturer?
+    private var videoSource: RTCVideoSource?
     private var isFrontCamera = true
     
     // STUN Servers (Google)
@@ -94,17 +95,24 @@ final class WebRTCClient: NSObject {
         
         // Video
         let videoSource = WebRTCClient.factory.videoSource()
+        self.videoSource = videoSource
         
         #if targetEnvironment(simulator)
-            print("Simulator environment: Camera disabled, sending empty video track.")
+            print("[WebRTC] Simulator environment: Camera disabled, sending empty video track.")
         #else
             let capturer = RTCCameraVideoCapturer(delegate: videoSource)
             self.videoCapturer = capturer
             let devices = RTCCameraVideoCapturer.captureDevices()
             if let frontCamera = devices.first(where: { $0.position == .front }) {
-                if let format = RTCCameraVideoCapturer.supportedFormats(for: frontCamera).first {
-                    let fps = format.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 30
+                if let format = selectBestFormat(for: frontCamera) {
+                    let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    let maxFps = format.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 30
+                    let fps = min(maxFps, 30) // Cap at 30fps to save battery
+                    
+                    self.videoSource?.adaptOutputFormat(toWidth: dims.width, height: dims.height, fps: Int32(fps))
+                    
                     capturer.startCapture(with: frontCamera, format: format, fps: Int(fps))
+                    print("[WebRTC] Front camera started: \(dims.width)x\(dims.height) @ \(Int(fps))fps")
                 }
             }
         #endif
@@ -112,9 +120,49 @@ final class WebRTCClient: NSObject {
         let videoTrack = WebRTCClient.factory.videoTrack(with: videoSource, trackId: "video0")
         self.localVideoTrack = videoTrack
         self.peerConnection.add(videoTrack, streamIds: ["stream0"])
+        
+        // Force high bitrate to prevent aggressive downscaling
+        setMaxBitrate()
+    }
+    
+    private func setMaxBitrate() {
+        for sender in peerConnection.senders {
+            if sender.track?.kind == "video" {
+                let parameters = sender.parameters
+                for encoding in parameters.encodings {
+                    // Force up to 4 Mbps to allow crystal clear 1080p without compression artifacts
+                    encoding.maxBitrateBps = 4_000_000 as NSNumber
+                }
+                sender.parameters = parameters
+                print("[WebRTC] Video max bitrate explicitly set to 4 Mbps")
+            }
+        }
     }
     
     // MARK: - Camera Controls
+    
+    private func selectBestFormat(for camera: AVCaptureDevice) -> AVCaptureDevice.Format? {
+        // Target 1080p (1920x1080) for highest quality
+        let targetWidth: Int32 = 1920
+        let formats = RTCCameraVideoCapturer.supportedFormats(for: camera)
+        
+        let bestFormat = formats.sorted { f1, f2 in
+            let w1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription).width
+            let w2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription).width
+            
+            // If widths are the same, prefer the one that supports higher framerates (up to 30)
+            if w1 == w2 {
+                let fps1 = f1.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 0
+                let fps2 = f2.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 0
+                return fps1 > fps2
+            }
+            
+            return abs(w1 - targetWidth) < abs(w2 - targetWidth)
+        }.first
+        
+        return bestFormat
+    }
+    
     func switchCamera() {
         #if !targetEnvironment(simulator)
         guard let capturer = self.videoCapturer as? RTCCameraVideoCapturer else { return }
@@ -124,13 +172,19 @@ final class WebRTCClient: NSObject {
         
         let devices = RTCCameraVideoCapturer.captureDevices()
         if let camera = devices.first(where: { $0.position == position }),
-           let format = RTCCameraVideoCapturer.supportedFormats(for: camera).first {
-            let fps = format.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 30
+           let format = selectBestFormat(for: camera) {
+            
+            let maxFps = format.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 30
+            let fps = min(maxFps, 30) // Cap at 30fps to save battery while preserving 1080p res
+            
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            self.videoSource?.adaptOutputFormat(toWidth: dims.width, height: dims.height, fps: Int32(fps))
             
             // Must stop current camera before starting another — AVCaptureSession will crash otherwise
             capturer.stopCapture {
                 capturer.startCapture(with: camera, format: format, fps: Int(fps))
-                print("[WebRTCClient] Switched camera to \(position == .front ? "Front" : "Back").")
+                let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                print("[WebRTC] Switched camera to \(position == .front ? "Front" : "Back") at \(dims.width)x\(dims.height) @ \(Int(fps))fps.")
             }
         }
         #endif
@@ -217,18 +271,18 @@ final class WebRTCClient: NSObject {
 // MARK: - PeerConnectionDelegate
 extension WebRTCClient: RTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {
-        print("WebRTC Signaling State: \(stateChanged.rawValue)")
+        print("[WebRTC] Signaling state: \(stateChanged.rawValue)")
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
-        print("WebRTC Connection State: \(newState.rawValue)")
+        print("[WebRTC] ICE connection state: \(WebRTCClient.iceStateString(newState))")
         self.delegate?.webRTCClient(self, didChangeConnectionState: newState)
     }
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
-        print("WebRTC Stream Added: \(stream.streamId)")
+        print("[WebRTC] Stream added: \(stream.streamId)")
         if let track = stream.videoTracks.first {
-            print("WebRTC Video Track Found in stream")
+            print("[WebRTC] Remote video track found")
             self.remoteVideoTrack = track
             self.delegate?.webRTCClient(self, didReceiveRemoteVideoTrack: track)
         }
@@ -240,7 +294,34 @@ extension WebRTCClient: RTCPeerConnectionDelegate {
     
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
-    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
+        let stateStr: String
+        switch newState {
+        case .new: stateStr = "new"
+        case .gathering: stateStr = "gathering"
+        case .complete: stateStr = "complete"
+        @unknown default: stateStr = "unknown(\(newState.rawValue))"
+        }
+        print("[WebRTC] ICE gathering state: \(stateStr)")
+    }
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
+}
+
+// MARK: - Helpers
+
+extension WebRTCClient {
+    static func iceStateString(_ state: RTCIceConnectionState) -> String {
+        switch state {
+        case .new: return "new"
+        case .checking: return "checking"
+        case .connected: return "connected"
+        case .completed: return "completed"
+        case .failed: return "FAILED"
+        case .disconnected: return "disconnected"
+        case .closed: return "closed"
+        case .count: return "count"
+        @unknown default: return "unknown(\(state.rawValue))"
+        }
+    }
 }

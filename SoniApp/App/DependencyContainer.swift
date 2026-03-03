@@ -71,6 +71,16 @@ final class DependencyContainer: ObservableObject {
                 print("✅ Push token sent on app startup")
             }
         }
+        
+        // Also send VoIP token — it may have arrived before login
+        let voipToken = UserDefaults.standard.string(forKey: "voipToken")
+        if let voipToken = voipToken, !voipToken.isEmpty {
+            voipPushService.saveVoIPToken(username: username, token: voipToken) { success in
+                if success {
+                    print("✅ VoIP token sent on app startup")
+                }
+            }
+        }
     }
     
     // MARK: - Factory

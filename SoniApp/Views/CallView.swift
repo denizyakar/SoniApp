@@ -3,36 +3,12 @@ import SwiftUI
 import Combine
 import WebRTC
 
-/// Call screen states
-enum CallState {
-    case incoming // Opponent is calling, accept/decline screen
-    case outgoing // We are calling, waiting for opponent to answer
-    case active   // Call in progress
-    case ended    // Call ended (dismiss screen)
-}
-
 struct CallView: View {
     let opponentId: String
     let opponentName: String
     let opponentAvatarUrl: String
     
-    @Binding var isPresented: Bool
-    
     @EnvironmentObject var callManager: CallManager
-    
-    // UI State Computed from CallManager
-    private var callState: CallState {
-        if callManager.connectionState == .connected || callManager.connectionState == .completed {
-            return .active
-        } else if callManager.hasAnsweredCall {
-            // Answered but not fully connected yet — still show Active (Video) screen
-            return .active
-        } else if callManager.incomingCallData != nil {
-            return .incoming
-        } else {
-            return .outgoing
-        }
-    }
     
     // PIP (Picture-in-Picture) Draggable State
     @State private var pipPosition: CGPoint = CGPoint(x: UIScreen.main.bounds.width - 80, y: 150)
@@ -47,16 +23,25 @@ struct CallView: View {
             // Background
             AppTheme.backgroundLight.ignoresSafeArea()
             
-            if callState == .incoming {
+            switch callManager.callPhase {
+            case .incomingRinging:
                 incomingCallView
-            } else if callState == .outgoing {
+            case .outgoingRinging:
                 outgoingCallView
-            } else if callState == .active {
+            case .connecting:
+                connectingView
+            case .active:
                 activeCallView
+            case .failed(let reason):
+                failedCallView(reason: reason)
+            case .ended:
+                endedView
+            case .idle:
+                EmptyView()
             }
         }
         .onReceive(timer) { _ in
-            if callState == .active {
+            if callManager.callPhase == .active {
                 // Mock audio wave for visual testing
                 withAnimation(.linear(duration: 0.2)) {
                     audioLevel = CGFloat.random(in: 0.1...1.0)
@@ -65,7 +50,7 @@ struct CallView: View {
         }
     }
     
-    // MARK: - Views
+    // MARK: - Incoming Call View
     
     private var incomingCallView: some View {
         VStack(spacing: 40) {
@@ -91,9 +76,7 @@ struct CallView: View {
             
             // Accept/Decline Buttons
             HStack(spacing: 60) {
-                Button(action: {
-                    endCall()
-                }) {
+                Button(action: { endCall() }) {
                     ZStack {
                         Circle().fill(Color.red).frame(width: 80, height: 80)
                         Image(systemName: "phone.down.fill")
@@ -102,9 +85,7 @@ struct CallView: View {
                     }
                 }
                 
-                Button(action: {
-                    acceptCall()
-                }) {
+                Button(action: { acceptCall() }) {
                     ZStack {
                         Circle().fill(Color.green).frame(width: 80, height: 80)
                         Image(systemName: "phone.fill")
@@ -116,6 +97,8 @@ struct CallView: View {
             .padding(.bottom, 60)
         }
     }
+    
+    // MARK: - Outgoing Call View
     
     private var outgoingCallView: some View {
         VStack(spacing: 40) {
@@ -136,9 +119,7 @@ struct CallView: View {
             
             Spacer()
             
-            Button(action: {
-                endCall()
-            }) {
+            Button(action: { endCall() }) {
                 ZStack {
                     Circle().fill(Color.red).frame(width: 80, height: 80)
                     Image(systemName: "phone.down.fill")
@@ -149,6 +130,43 @@ struct CallView: View {
             .padding(.bottom, 60)
         }
     }
+    
+    // MARK: - Connecting View
+    
+    private var connectingView: some View {
+        VStack(spacing: 30) {
+            Spacer()
+            
+            AvatarView(imageUrl: URL(string: opponentAvatarUrl), size: 100)
+                .clipShape(Circle())
+            
+            Text(opponentName)
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+            
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                .scaleEffect(1.5)
+            
+            Text("Connecting...")
+                .font(.title3)
+                .foregroundColor(.white.opacity(0.7))
+            
+            Spacer()
+            
+            Button(action: { endCall() }) {
+                ZStack {
+                    Circle().fill(Color.red).frame(width: 70, height: 70)
+                    Image(systemName: "phone.down.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                }
+            }
+            .padding(.bottom, 60)
+        }
+    }
+    
+    // MARK: - Active Call View
     
     private var activeCallView: some View {
         ZStack {
@@ -195,7 +213,7 @@ struct CallView: View {
                             pipPosition = value.location
                         }
                         .onEnded { value in
-                            // Snapping logic can be added here
+                            // Snapping logic
                             let screenW = UIScreen.main.bounds.width
                             let screenH = UIScreen.main.bounds.height
                             let padding: CGFloat = 80
@@ -219,6 +237,52 @@ struct CallView: View {
                 Spacer()
                 controlsArea
             }
+        }
+    }
+    
+    // MARK: - Failed Call View
+    
+    private func failedCallView(reason: String) -> some View {
+        VStack(spacing: 30) {
+            Spacer()
+            
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.red)
+            
+            Text("Call Failed")
+                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .foregroundColor(.white)
+            
+            Text(reason)
+                .font(.title3)
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            Spacer()
+            
+            Button(action: { callManager.dismissCall() }) {
+                Text("Close")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(width: 200, height: 50)
+                    .background(AppTheme.primary)
+                    .cornerRadius(25)
+            }
+            .padding(.bottom, 60)
+        }
+    }
+    
+    // MARK: - Ended View
+    
+    private var endedView: some View {
+        VStack {
+            Spacer()
+            Text("Call Ended")
+                .font(.title2.weight(.medium))
+                .foregroundColor(.white.opacity(0.7))
+            Spacer()
         }
     }
     
@@ -259,7 +323,7 @@ struct CallView: View {
         ZStack {
             if let track = callManager.localVideoTrack {
                 WebRTCVideoView(track: track)
-                    .scaleEffect(x: -1, y: 1) // Ayna efekti
+                    .scaleEffect(x: -1, y: 1) // Mirror effect
             } else {
                 Color.gray.opacity(0.3)
                 #if targetEnvironment(simulator)
@@ -267,7 +331,7 @@ struct CallView: View {
                     Image(systemName: "desktopcomputer")
                         .font(.largeTitle)
                         .foregroundColor(.white)
-                    Text("Simulator (Kamera Yok)")
+                    Text("Simulator (No Camera)")
                         .font(.caption)
                         .foregroundColor(.white)
                 }
@@ -281,26 +345,6 @@ struct CallView: View {
                 Color.black
                 Image(systemName: "video.slash.fill")
                     .foregroundColor(.white)
-            }
-        }
-    }
-    
-    private var isConnectionFailed: Bool {
-        let state = callManager.connectionState
-        return state == .failed || state == .disconnected || state == .closed
-    }
-    
-    private var connectingStatusText: String {
-        let state = callManager.connectionState
-        if isConnectionFailed {
-            return "Connection failed. Please try again."
-        } else if state == .checking {
-            return "Connection quality is being verified..."
-        } else {
-            if callManager.incomingCallData != nil {
-                return "Connecting..."
-            } else {
-                return "Call accepted, connecting..."
             }
         }
     }
@@ -325,21 +369,14 @@ struct CallView: View {
                 VStack {
                     AvatarView(imageUrl: URL(string: opponentAvatarUrl), size: 60)
                     
-                    if !isConnectionFailed {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.3)
-                            .padding(.vertical, 12)
-                    } else {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red)
-                            .font(.title)
-                            .padding(.vertical, 12)
-                    }
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.3)
+                        .padding(.vertical, 12)
                     
-                    Text(connectingStatusText)
+                    Text("Waiting for video...")
                         .font(.body.weight(.medium))
-                        .foregroundColor(isConnectionFailed ? .red : .white)
+                        .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
                 }
@@ -349,10 +386,8 @@ struct CallView: View {
     
     private var controlsArea: some View {
         HStack(spacing: 20) {
-            // Kamera Butonu
-            Button(action: {
-                callManager.toggleCamera()
-            }) {
+            // Camera Button
+            Button(action: { callManager.toggleCamera() }) {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.2)).frame(width: 55, height: 55)
                     Image(systemName: callManager.isCameraOff ? "video.slash.fill" : "video.fill")
@@ -362,9 +397,7 @@ struct CallView: View {
             }
             
             // Flip Camera Button (Front/Back)
-            Button(action: {
-                callManager.switchCamera()
-            }) {
+            Button(action: { callManager.switchCamera() }) {
                 ZStack {
                     Circle().fill(Color.white.opacity(0.2)).frame(width: 55, height: 55)
                     Image(systemName: "arrow.triangle.2.circlepath.camera.fill")
@@ -373,10 +406,8 @@ struct CallView: View {
                 }
             }
             
-            // Mikrofon Butonu
-            Button(action: {
-                callManager.toggleMute()
-            }) {
+            // Mic Button
+            Button(action: { callManager.toggleMute() }) {
                 ZStack {
                     Circle().fill(callManager.isMuted ? Color.white.opacity(0.9) : Color.white.opacity(0.2)).frame(width: 55, height: 55)
                     Image(systemName: callManager.isMuted ? "mic.slash.fill" : "mic.fill")
@@ -386,9 +417,7 @@ struct CallView: View {
             }
             
             // Speaker Button
-            Button(action: {
-                callManager.toggleSpeaker()
-            }) {
+            Button(action: { callManager.toggleSpeaker() }) {
                 ZStack {
                     Circle().fill(callManager.isSpeakerOn ? Color.white.opacity(0.2) : Color.white.opacity(0.9)).frame(width: 55, height: 55)
                     Image(systemName: callManager.isSpeakerOn ? "speaker.wave.3.fill" : "iphone")
@@ -397,10 +426,8 @@ struct CallView: View {
                 }
             }
             
-            // Kapatma Butonu
-            Button(action: {
-                endCall()
-            }) {
+            // End Call Button
+            Button(action: { endCall() }) {
                 ZStack {
                     Circle().fill(Color.red).frame(width: 55, height: 55)
                     Image(systemName: "phone.down.fill")
@@ -424,13 +451,12 @@ struct CallView: View {
     
     private func endCall() {
         callManager.endCall()
-        isPresented = false
     }
 }
 
 #Preview("Outgoing Call") {
     let container = DependencyContainer()
-    CallView(opponentId: "123", opponentName: "Ali Veli", opponentAvatarUrl: "", isPresented: .constant(true))
+    CallView(opponentId: "123", opponentName: "Ali Veli", opponentAvatarUrl: "")
         .environmentObject(container.callManager)
 }
 

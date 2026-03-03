@@ -221,8 +221,18 @@ final class SocketChatService: ChatServiceProtocol {
         socket.on(clientEvent: .connect) { [weak self] _, _ in
             print("[SocketService] Connected ✅")
             self?.isConnected = true
+            
+            // Try to get userId again just in case it wasn't available when connect() was called initially
+            if self?.currentUserIdForSocket == nil,
+               let currentUserId = UserDefaults.standard.string(forKey: "userId") {
+                self?.currentUserIdForSocket = currentUserId
+            }
+            
             if let uid = self?.currentUserIdForSocket {
+                print("[SocketService] Registering with userId: \(uid)")
                 self?.socket.emit("register", uid)
+            } else {
+                print("[SocketService] WARNING: Connected but NO userId available for registration!")
             }
             self?._connectionStateSubject.send(true)
         }
