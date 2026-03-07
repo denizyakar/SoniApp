@@ -38,6 +38,9 @@ struct AuthView: View {
                     .foregroundColor(AppTheme.secondaryText))
                     .foregroundColor(AppTheme.white)
                     .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.next)
                     .padding(14)
                     .overlay(RoundedRectangle(cornerRadius: 12)
                         .stroke(AppTheme.inputBorder, lineWidth: 1.5)
@@ -49,6 +52,8 @@ struct AuthView: View {
                     .foregroundColor(AppTheme.secondaryText))
                     .foregroundColor(AppTheme.white)
                     .textFieldStyle(.plain)
+                    .submitLabel(.go)
+                    .onSubmit { handleAction() }
                     .padding(14)
                     .overlay(RoundedRectangle(cornerRadius: 12)
                         .stroke(AppTheme.inputBorder, lineWidth: 1.5)

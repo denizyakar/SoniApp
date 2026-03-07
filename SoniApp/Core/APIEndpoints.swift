@@ -30,6 +30,19 @@ enum APIEndpoints {
         URL(string: "\(baseURL)/users/\(userId)/profile")!
     }
     
+    // MARK: - Contacts
+    static var contacts: URL {
+        URL(string: "\(baseURL)/contacts")!
+    }
+    
+    static var addContact: URL {
+        URL(string: "\(baseURL)/contacts/add")!
+    }
+    
+    static var removeContact: URL {
+        URL(string: "\(baseURL)/contacts/remove")!
+    }
+    
     // MARK: - Messages
     static func messages(from senderId: String, to receiverId: String) -> URL {
         URL(string: "\(baseURL)/messages?from=\(senderId)&to=\(receiverId)")!

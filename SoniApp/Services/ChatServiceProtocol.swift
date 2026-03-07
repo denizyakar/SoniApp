@@ -6,6 +6,8 @@
 import Foundation
 import SocketIO
 import Combine
+import Network
+import UIKit
 
 // MARK: - Protocol
 
@@ -87,6 +89,12 @@ final class SocketChatService: ChatServiceProtocol {
     private var socket: SocketIOClient
     private(set) var isConnected: Bool = false
     
+    // MARK: - Network Monitoring
+    private let networkMonitor = NWPathMonitor()
+    private let networkQueue = DispatchQueue(label: "com.soniapp.networkMonitor")
+    private var lastPathStatus: NWPath.Status?
+    private var lastInterfaceTypes: Set<NWInterface.InterfaceType> = []
+    
     // MARK: - Init
     init() {
         let url = URL(string: APIEndpoints.baseURL)!
@@ -94,11 +102,16 @@ final class SocketChatService: ChatServiceProtocol {
         manager = SocketManager(socketURL: url, config: [
             .log(false),
             .compress,
-            .forceWebsockets(true)
+            .forceWebsockets(true),
+            .reconnects(true),
+            .reconnectWait(2),
+            .reconnectAttempts(-1)  // infinite reconnect
         ])
         socket = manager.defaultSocket
         
         setupListeners()
+        startNetworkMonitoring()
+        observeAppLifecycle()
     }
     
     private var currentUserIdForSocket: String?
@@ -106,11 +119,11 @@ final class SocketChatService: ChatServiceProtocol {
     // MARK: - Connection
     
     func connect() {
-        guard !isConnected else { return }
-        
         if let currentUserId = UserDefaults.standard.string(forKey: "userId") {
             self.currentUserIdForSocket = currentUserId
         }
+        
+        guard socket.status != .connected && socket.status != .connecting else { return }
         
         print("[SocketService] Connecting...")
         socket.connect()
@@ -119,6 +132,66 @@ final class SocketChatService: ChatServiceProtocol {
     func disconnect() {
         socket.disconnect()
         isConnected = false
+    }
+    
+    /// Force disconnect and reconnect (used on network changes)
+    func forceReconnect() {
+        print("[SocketService] 🔄 Force reconnecting...")
+        socket.disconnect()
+        isConnected = false
+        
+        // Small delay to let the old connection fully tear down
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.connect()
+        }
+    }
+    
+    // MARK: - Network Monitoring
+    
+    private func startNetworkMonitoring() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            guard let self = self else { return }
+            
+            let currentInterfaces = Set(path.availableInterfaces.map { $0.type })
+            
+            // Only act if we were connected and the interface changed
+            if path.status == .satisfied {
+                if self.lastPathStatus == .satisfied && currentInterfaces != self.lastInterfaceTypes {
+                    // Network interface changed (e.g. WiFi → Cellular)
+                    print("[SocketService] 📡 Network interface changed — forcing reconnect")
+                    DispatchQueue.main.async {
+                        self.forceReconnect()
+                    }
+                } else if self.lastPathStatus == .unsatisfied {
+                    // Network came back from being offline
+                    print("[SocketService] 📡 Network restored — reconnecting")
+                    DispatchQueue.main.async {
+                        self.connect()
+                    }
+                }
+            }
+            
+            self.lastPathStatus = path.status
+            self.lastInterfaceTypes = currentInterfaces
+        }
+        networkMonitor.start(queue: networkQueue)
+    }
+    
+    // MARK: - App Lifecycle
+    
+    private func observeAppLifecycle() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            // If socket is disconnected when app comes to foreground, reconnect
+            if !self.isConnected {
+                print("[SocketService] 📱 App entered foreground — reconnecting")
+                self.connect()
+            }
+        }
     }
     
     func sendMessage(text: String, senderId: String, receiverId: String, clientId: String? = nil, imageUrl: String? = nil) {

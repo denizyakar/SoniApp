@@ -176,6 +176,92 @@ final class AuthService {
         }.resume()
     }
     
+    // MARK: - Contacts
+    
+    func fetchContacts(completion: @escaping (Result<[ChatUser], AppError>) -> Void) {
+        var request = URLRequest(url: APIEndpoints.contacts)
+        request.httpMethod = "GET"
+        
+        if let token = sessionStore.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        session.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ fetchContacts Network Error: \(error.localizedDescription)")
+                completion(.failure(.networkError(underlying: error)))
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(.serverError(message: "No data received")))
+                return
+            }
+            
+            do {
+                let users = try JSONDecoder().decode([ChatUser].self, from: data)
+                completion(.success(users))
+            } catch {
+                print("❌ fetchContacts Decode Error: \(error)")
+                completion(.failure(.decodingError(underlying: error)))
+            }
+        }.resume()
+    }
+    
+    func addContact(contactId: String, completion: @escaping (Result<ChatUser, AppError>) -> Void) {
+        var request = URLRequest(url: APIEndpoints.addContact)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = sessionStore.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = ["contactId": contactId]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        session.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(.networkError(underlying: error)))
+                return
+            }
+            
+            guard let data = data else {
+                completion(.failure(.serverError(message: "No data received")))
+                return
+            }
+            
+            do {
+                let user = try JSONDecoder().decode(ChatUser.self, from: data)
+                completion(.success(user))
+            } catch {
+                print("❌ addContact Decode Error: \(error)")
+                completion(.failure(.decodingError(underlying: error)))
+            }
+        }.resume()
+    }
+    
+    func removeContact(contactId: String, completion: @escaping (Result<Void, AppError>) -> Void) {
+        var request = URLRequest(url: APIEndpoints.removeContact)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = sessionStore.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let body: [String: Any] = ["contactId": contactId]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        
+        session.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion(.failure(.networkError(underlying: error)))
+                return
+            }
+            completion(.success(()))
+        }.resume()
+    }
+    
     // MARK: - Private Helpers
     
     private func sendPushTokenIfNeeded() {

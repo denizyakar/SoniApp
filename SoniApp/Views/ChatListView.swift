@@ -18,6 +18,7 @@ struct ChatListView: View {
     /// For programmatic navigation — deeplink uses this
     @State private var navigationPath = NavigationPath()
     @State private var showingProfile = false
+    @State private var showingAddUser = false
     
     // Avatar Overlay State
     @State private var isShowingOverlay = false
@@ -27,55 +28,78 @@ struct ChatListView: View {
     var body: some View {
         ZStack {
             NavigationStack(path: $navigationPath) {
-            List(viewModel.filteredUsers) { user in
+            ZStack {
+                AppTheme.background.ignoresSafeArea()
                 
-                let chatUserStruct = user
-                
-                NavigationLink(value: chatUserStruct) {
-                    HStack {
-                        AvatarView(chatUser: chatUserStruct, size: 48)
-                            .padding(.trailing, 8)
-                            .onTapGesture {
-                                overlayImageUrl = chatUserStruct.avatarImageUrl
-                                overlaySfSymbol = chatUserStruct.avatar
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    isShowingOverlay = true
+                if viewModel.users.isEmpty {
+                    // Empty state
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 56))
+                            .foregroundColor(AppTheme.secondaryText.opacity(0.6))
+                        Text("No conversations yet")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundColor(AppTheme.white.opacity(0.8))
+                        Text("Tap + to add someone and start chatting")
+                            .font(.subheadline)
+                            .foregroundColor(AppTheme.secondaryText)
+                    }
+                } else {
+                    List {
+                        ForEach(viewModel.filteredUsers) { user in
+                        
+                        let chatUserStruct = user
+                        
+                        NavigationLink(value: chatUserStruct) {
+                            HStack {
+                                AvatarView(chatUser: chatUserStruct, size: 48)
+                                    .padding(.trailing, 8)
+                                    .onTapGesture {
+                                        overlayImageUrl = chatUserStruct.avatarImageUrl
+                                        overlaySfSymbol = chatUserStruct.avatar
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                            isShowingOverlay = true
+                                        }
+                                    }
+                                
+                                VStack(alignment: .leading) {
+                                    Text(user.displayName)
+                                        .font(.headline)
+                                        .foregroundColor(AppTheme.white)
+                                    
+                                    
+                                    Text("Click to start chatting")
+                                        .font(.footnote)
+                                        .foregroundColor(AppTheme.white)
+                                    
+                                }
+                                
+                                Spacer()
+                                
+                                // Unread badge
+                                if let count = container.sessionStore.unreadCounts[user.id], count > 0 {
+                                    Text("\(count)")
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(AppTheme.primary)
+                                        .frame(minWidth: 30, minHeight: 30)
+                                        .background(.white)
+                                        .clipShape(Circle())
                                 }
                             }
-                        
-                        VStack(alignment: .leading) {
-                            Text(user.displayName)
-                                .font(.headline)
-                                .foregroundColor(AppTheme.white)
-                            
-                            
-                            Text("Click to start chatting")
-                                .font(.footnote)
-                                .foregroundColor(AppTheme.white)
-                            
+                            .padding(.vertical, 8)
                         }
-                        
-                        Spacer()
-                        
-                        // Unread badge
-                        if let count = container.sessionStore.unreadCounts[user.id], count > 0 {
-                            Text("\(count)")
-                                .font(.subheadline)
-                                .fontWeight(.bold)
-                                .foregroundColor(AppTheme.primary)
-                                .frame(minWidth: 30, minHeight: 30)
-                                .background(.white)
-                                .clipShape(Circle())
+                        .listRowBackground(AppTheme.backgroundLight)
+                        .listRowSeparatorTint(AppTheme.white.opacity(0.1))
                         }
+                        .onDelete(perform: deleteContact)
                     }
-                    .padding(.vertical, 8)
+                    .scrollContentBackground(.hidden)
                 }
-                .listRowBackground(AppTheme.backgroundLight)
-                .listRowSeparatorTint(AppTheme.white.opacity(0.1))
             }
-            .scrollContentBackground(.hidden)
-            .background(AppTheme.background)
             .navigationTitle("Messages")
+            .navigationBarTitleDisplayMode(.inline)
             
             .navigationDestination(for: ChatUser.self) { chatUser in
                 ChatView(user: chatUser)
@@ -88,7 +112,15 @@ struct ChatListView: View {
                     .foregroundColor(AppTheme.white.opacity(0.9))
                     .bold()
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    Button {
+                        showingAddUser = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .foregroundColor(AppTheme.white)
+                            .bold()
+                    }
+                    
                     Button {
                         showingProfile = true
                     } label: {
@@ -102,6 +134,10 @@ struct ChatListView: View {
             }
             .sheet(isPresented: $showingProfile) {
                 UserProfileView()
+                    .environmentObject(container)
+            }
+            .sheet(isPresented: $showingAddUser) {
+                AddUserView(existingContactIds: Set(viewModel.users.map { $0.id }))
                     .environmentObject(container)
             }
             .onAppear {
@@ -132,7 +168,7 @@ struct ChatListView: View {
                     // Retry pending messages on app foreground
                     container.retryService.retryAllPendingMessages()
                     
-                    // Sync unread counts (auto-sync from background)
+                    // Sync contacts (auto-sync from background)
                     viewModel.refreshUsers()
                     
                     // Clear app icon badge when user opens the app
@@ -146,6 +182,9 @@ struct ChatListView: View {
                     navigateToChat(userId: senderId)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .contactAdded)) { _ in
+                viewModel.refreshUsers()
+            }
         } // Ending NavigationStack
             
         FullScreenAvatarOverlay(
@@ -153,6 +192,15 @@ struct ChatListView: View {
             imageUrl: overlayImageUrl,
             sfSymbol: overlaySfSymbol
         )
+        }
+    }
+    
+    // MARK: - Swipe to Delete
+    
+    private func deleteContact(at offsets: IndexSet) {
+        for index in offsets {
+            let user = viewModel.filteredUsers[index]
+            viewModel.removeContact(userId: user.id)
         }
     }
     
