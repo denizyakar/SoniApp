@@ -12,24 +12,25 @@ struct AuthView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var message = ""
+    @State private var isSuccess = false
     @State private var isLoading = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {
+                
+                Spacer()
+                
                 // Title
                 Text("Soni App")
-                    .font(.system(size:44))
-                    .bold()
+                    .font(.system(size: 44, weight: .heavy, design: .rounded))
                     .foregroundColor(AppTheme.myBubble)
                 
                 Text(isLoginMode ? "Log In" : "Register")
-                    .font(.largeTitle)
+                    .font(.title)
                     .fontWeight(.bold)
                     .foregroundColor(AppTheme.white)
-                    .padding(.bottom, 20)
-                    .padding()
-                    
+                    .padding(.bottom, 12)
                 
                 // TextFields
                 TextField("", text: $username, prompt: Text("Username")
@@ -37,22 +38,37 @@ struct AuthView: View {
                     .foregroundColor(AppTheme.secondaryText))
                     .foregroundColor(AppTheme.white)
                     .textFieldStyle(.plain)
-                    .padding(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10)
-                    .stroke(AppTheme.inputBorder, lineWidth: 2)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.next)
+                    .padding(14)
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppTheme.inputBorder, lineWidth: 1.5)
                     )
-                    .padding(.horizontal)
+                    .padding(.horizontal, 24)
                     
                 SecureField("", text: $password, prompt: Text("Password")
                     .bold()
                     .foregroundColor(AppTheme.secondaryText))
+                    .foregroundColor(AppTheme.white)
                     .textFieldStyle(.plain)
-                    .padding(10)
-                    .overlay(RoundedRectangle(cornerRadius: 10)
-                        .stroke(AppTheme.inputBorder, lineWidth: 2)
+                    .submitLabel(.go)
+                    .onSubmit { handleAction() }
+                    .padding(14)
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppTheme.inputBorder, lineWidth: 1.5)
                     )
-                    .padding(.horizontal)
-                    .padding(.bottom)
+                    .padding(.horizontal, 24)
+                
+                // Status message
+                if !message.isEmpty {
+                    Text(message)
+                        .foregroundColor(isSuccess ? .green : .red)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
                 
                 // Button
                 Button(action: handleAction) {
@@ -62,44 +78,40 @@ struct AuthView: View {
                             .frame(maxWidth: .infinity)
                             .padding()
                             .background(AppTheme.primary)
-                            .cornerRadius(12)
+                            .cornerRadius(14)
                     } else {
                         Text(isLoginMode ? "Log In" : "Register")
-                            .font(.system(size: 20))
-                            .bold()
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding()
                             .background(AppTheme.primary)
-                            .cornerRadius(12)
+                            .cornerRadius(14)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top)
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
                 .disabled(isLoading)
                 
                 // Changing modes
                 Button(action: {
-                    isLoginMode.toggle()
-                    message = ""
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isLoginMode.toggle()
+                        message = ""
+                        isSuccess = false
+                    }
                 }) {
                     Text(isLoginMode ? "Don't have an account? Register" : "Already have an account? Log In")
-                        .padding(.top)
+                        .padding(.top, 4)
                         .foregroundColor(AppTheme.secondaryText)
+                        .font(.subheadline)
                         .bold()
                 }
                 
-                // Status message
-                if !message.isEmpty {
-                    Text(message)
-                        .foregroundColor(.red)
-                        .font(.caption)
-                        .padding()
-                }
+                Spacer()
+                Spacer()
                 
             }
-            .padding(.bottom)
-            .padding(.bottom)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(AppTheme.background.ignoresSafeArea())
         }
@@ -109,6 +121,7 @@ struct AuthView: View {
 
     private func handleAction() {
         isLoading = true
+        isSuccess = false
         let authService = container.makeAuthService()
         
         if isLoginMode {
@@ -119,6 +132,7 @@ struct AuthView: View {
                     case .success:
                         print("Login successful!")
                     case .failure(let error):
+                        isSuccess = false
                         message = error.localizedDescription
                     }
                 }
@@ -129,11 +143,13 @@ struct AuthView: View {
                     isLoading = false
                     switch result {
                     case .success(let msg):
+                        isSuccess = true
                         message = msg
                         isLoginMode = true
                         username = ""
                         password = ""
                     case .failure(let error):
+                        isSuccess = false
                         message = error.localizedDescription
                     }
                 }

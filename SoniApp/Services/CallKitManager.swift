@@ -12,6 +12,8 @@ import WebRTC
 protocol CallKitManagerDelegate: AnyObject {
     func callKitDidAnswerCall(uuid: UUID)
     func callKitDidEndCall(uuid: UUID)
+    func callKitDidActivateAudioSession()
+    func callKitDidDeactivateAudioSession()
 }
 
 final class CallKitManager: NSObject {
@@ -132,11 +134,13 @@ extension CallKitManager: CXProviderDelegate {
         print("[CallKit] Audio session ACTIVATED")
         RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
         RTCAudioSession.sharedInstance().isAudioEnabled = true
+        delegate?.callKitDidActivateAudioSession()
     }
     
     func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
         print("[CallKit] Audio session DEACTIVATED")
         RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
         RTCAudioSession.sharedInstance().isAudioEnabled = false
+        delegate?.callKitDidDeactivateAudioSession()
     }
 }

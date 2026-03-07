@@ -45,12 +45,13 @@ class ChatListViewModel: ObservableObject {
         self.userRepository = UserRepository(modelContext: context)
         self.authService = authService
         self.sessionStore = sessionStore
-        syncUsers()
+        syncContacts()
         
         chatService.userRegisteredPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
-                self?.syncUsers()
+                // No longer auto-refresh — new users must be added manually via AddUserView
+                // self?.syncContacts()
             }
             .store(in: &cancellables)
         
@@ -81,6 +82,13 @@ class ChatListViewModel: ObservableObject {
         }
         
         sessionStore.incrementUnread(for: message.senderId)
+        
+        // Auto-add sender to contacts if not already in the list
+        if !users.contains(where: { $0.id == message.senderId }) {
+            // Server already auto-added via $addToSet in chat_message handler
+            // Just refresh the local list to pick up the new contact
+            syncContacts()
+        }
         
         // Play sound only when ChatListView is visible
         if sessionStore.isInChatList {
@@ -115,24 +123,81 @@ class ChatListViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Contacts Management
+    
     func refreshUsers() {
-        syncUsers()
+        syncContacts()
     }
     
-    private func syncUsers() {
+    func removeContact(userId: String) {
+        guard let authService = authService else { return }
+        
+        // Remove from UI immediately
+        users.removeAll { $0.id == userId }
+        sessionStore?.unreadCounts.removeValue(forKey: userId)
+        
+        // Remove from SwiftData
+        do {
+            try userRepository?.removeContactLocally(userId: userId)
+        } catch {
+            print("❌ SwiftData remove error: \(error.localizedDescription)")
+        }
+        
+        // Remove from server
+        authService.removeContact(contactId: userId) { result in
+            switch result {
+            case .success:
+                print("✅ Contact removed from server: \(userId)")
+            case .failure(let error):
+                print("❌ Server remove error: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func addContact(contactId: String, completion: @escaping (Bool) -> Void) {
+        guard let authService = authService else {
+            completion(false)
+            return
+        }
+        
+        authService.addContact(contactId: contactId) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let chatUser):
+                    // Add to UI if not already there
+                    if !(self?.users.contains(where: { $0.id == chatUser.id }) ?? true) {
+                        self?.users.append(chatUser)
+                    }
+                    // Add to SwiftData
+                    do {
+                        try self?.userRepository?.addContactLocally(user: chatUser)
+                    } catch {
+                        print("❌ SwiftData add error: \(error.localizedDescription)")
+                    }
+                    print("✅ Contact added: \(chatUser.username)")
+                    completion(true)
+                case .failure(let error):
+                    print("❌ Add contact error: \(error.localizedDescription)")
+                    completion(false)
+                }
+            }
+        }
+    }
+    
+    private func syncContacts() {
         guard let authService = authService,
               let sessionStore = sessionStore else { return }
         
         Task {
             do {
-                let fetchedUsers = try await userRepository?.syncUsersFromServer(authService: authService, sessionStore: sessionStore)
+                let fetchedContacts = try await userRepository?.syncContactsFromServer(authService: authService, sessionStore: sessionStore)
                 
-                if let fetchedUsers = fetchedUsers {
-                    self.users = fetchedUsers
+                if let fetchedContacts = fetchedContacts {
+                    self.users = fetchedContacts
                 }
                 
             } catch {
-                print("❌ User sync error: \(error.localizedDescription)")
+                print("❌ Contacts sync error: \(error.localizedDescription)")
             }
         }
     }
