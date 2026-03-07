@@ -53,6 +53,7 @@ final class CallManager: ObservableObject {
     private var activeCallUUID: UUID?
     
     private var hasReceivedRemoteSdp: Bool = false
+    private var audioSessionActivatedByCallKit: Bool = false
     private var pendingRemoteCandidates: [RTCIceCandidate] = []
     private var pendingAccept: Bool = false
     
@@ -295,7 +296,7 @@ final class CallManager: ObservableObject {
     // MARK: - Outgoing Call
     
     func startCall(to opponentId: String, callerId: String, callerName: String, callerAvatar: String, calleeName: String, calleeAvatar: String) {
-        guard callPhase == .idle || !callPhase.isInCall else { return }
+        guard !callPhase.isInCall else { return }
         print("[CALL] Starting call to \(opponentId)")
         
         currentOpponentId = opponentId
@@ -365,6 +366,13 @@ final class CallManager: ObservableObject {
         self.isMuted = false
         self.isSpeakerOn = true
         client.setAudioRoute(toSpeaker: true)
+        
+        // Fix: If CallKit already activated audio before WebRTC was ready,
+        // re-enable it now that the audio session has been reconfigured
+        if audioSessionActivatedByCallKit {
+            print("[CALL] Re-enabling audio after WebRTC setup (CallKit already activated)")
+            RTCAudioSession.sharedInstance().isAudioEnabled = true
+        }
     }
     
     func acceptCall() {
@@ -415,6 +423,7 @@ final class CallManager: ObservableObject {
                 print("[CALL] HTTP Fetch Error: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self.transitionTo(.failed(reason: "Bağlantı kurulamadı (HTTP Hatası)"))
+                    self.doCleanup(sendEndToRemote: false)
                 }
                 return
             }
@@ -439,6 +448,7 @@ final class CallManager: ObservableObject {
                     print("[CALL] HTTP returned no pending calls (404) or invalid JSON.")
                     DispatchQueue.main.async {
                         self.transitionTo(.failed(reason: "Arama bulunamadı veya düştü"))
+                        self.doCleanup(sendEndToRemote: false)
                     }
                 }
             } catch {
@@ -560,11 +570,13 @@ final class CallManager: ObservableObject {
         webRTCClient?.close()
         webRTCClient = nil
         
-        if callPhase == .active || callPhase == .connecting {
+        // Transition to terminal state based on current phase
+        if callPhase == .active || callPhase == .connecting || callPhase == .outgoingRinging {
             transitionTo(.ended)
         } else if callPhase == .incomingRinging {
             transitionTo(.idle)
         }
+        // .failed stays as-is (already terminal), .idle/.ended stay as-is
         
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -575,6 +587,10 @@ final class CallManager: ObservableObject {
             self.remoteVideoTrack = nil
             self.localVideoTrack = nil
             self.connectionState = .new
+            self.hasReceivedRemoteSdp = false
+            self.pendingRemoteCandidates.removeAll()
+            self.audioSessionActivatedByCallKit = false
+            self.pendingAccept = false
         }
     }
     
@@ -645,6 +661,20 @@ extension CallManager: CallKitManagerDelegate {
             }
             self.activeCallUUID = nil
             if self.callPhase.isInCall { self.endCall() }
+        }
+    }
+    
+    func callKitDidActivateAudioSession() {
+        DispatchQueue.main.async { [weak self] in
+            self?.audioSessionActivatedByCallKit = true
+            print("[CALL] Audio session activated flag set")
+        }
+    }
+    
+    func callKitDidDeactivateAudioSession() {
+        DispatchQueue.main.async { [weak self] in
+            self?.audioSessionActivatedByCallKit = false
+            print("[CALL] Audio session deactivated flag cleared")
         }
     }
 }
