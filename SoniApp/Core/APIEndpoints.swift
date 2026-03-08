@@ -10,7 +10,7 @@ import Foundation
 
 enum APIEndpoints {
     
-    static let baseURL = "https://soni-app.xyz"
+    static let baseURL = "your_domain_url"
     
     // MARK: - Auth
     static var login: URL {
