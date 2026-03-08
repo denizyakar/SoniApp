@@ -25,3 +25,9 @@ DerivedData/
 *.p8                
 Secrets.swift       
 GoogleService-Info.plist  
+
+# Node.js Server
+nodejsServer/node_modules/
+nodejsServer/uploads/
+nodejsServer/*.log
+.env
