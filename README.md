@@ -1,6 +1,6 @@
 # SoniApp
 
-A full-stack iOS communication platform featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration, and **push notifications** — built with SwiftUI and a custom Node.js backend.
+A full-stack iOS communication application featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration, and **push notifications** — built with SwiftUI and a custom Node.js backend.
 
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white) ![SwiftUI](https://img.shields.io/badge/SwiftUI-Framework-007AFF?logo=swift&logoColor=white) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-6+-47A248?logo=mongodb&logoColor=white) ![Socket.IO](https://img.shields.io/badge/Socket.IO-Realtime-010101?logo=socket.io&logoColor=white) ![WebRTC](https://img.shields.io/badge/WebRTC-Video_Calls-333333?logo=webrtc&logoColor=white) ![CallKit](https://img.shields.io/badge/CallKit-VoIP-007AFF?logo=apple&logoColor=white) ![Rocky Linux](https://img.shields.io/badge/Rocky_Linux-Self_Hosted-10B981?logo=linux&logoColor=white) ![Cloudflare](https://img.shields.io/badge/Cloudflare-Tunnel-F38020?logo=cloudflare&logoColor=white) ![JWT](https://img.shields.io/badge/JWT-Auth-000000?logo=jsonwebtokens&logoColor=white)
 
@@ -166,34 +166,39 @@ flowchart TD
 **Offline Queue:** Messages are persisted to SwiftData immediately, so they survive app kills. On reconnect, a Combine pipeline (`connectionStatePublisher` with `debounce`) triggers batch retry. Images are saved to `Documents/PendingImages/` first, uploaded to server on retry, then the socket emit fires with the server image URL.
 
 ```mermaid
-flowchart TD
-    A["User taps Send"] --> B{"Has image?"}
+flowchart LR
+    subgraph Local [1. Local Processing]
+        direction TB
+        A["User taps Send"] --> B{"Has image?"}
+        B -->|"Yes"| C["Save image to<br>Documents/PendingImages/<br>(JPEG 0.8)"]
+        C --> D["Create MessageItem<br>status: .pending<br>imageUrl: file://local"]
+        B -->|"No"| D2["Create MessageItem<br>status: .pending"]
+        D --> E["Insert to SwiftData"]
+        D2 --> E
+    end
 
-    B -->|"Yes"| C["Save image to<br>Documents/PendingImages/<br>(JPEG 0.8)"]
-    C --> D["Create MessageItem<br>status: .pending<br>imageUrl: file://local"]
-    B -->|"No"| D2["Create MessageItem<br>status: .pending"]
+    subgraph Network [2. Network & Retry]
+        direction TB
+        F{"Socket connected?"}
+        F -->|"Yes + Image"| G["Upload image<br>(POST /messages/upload)"]
+        G -->|"Server returns imageUrl"| H["socket.emit<br>chat_message"]
+        F -->|"Yes + Text only"| H
+        F -->|"No"| I["Message stays .pending<br>in SwiftData"]
+        I --> J["PendingMessageRetryService<br>connectionStatePublisher<br>.debounce(1s)"]
+        J -->|"Socket reconnects"| K["Batch retry all<br>.pending + .failed messages"]
+        K --> F
+    end
 
-    D --> E["Insert to SwiftData"]
-    D2 --> E
+    subgraph Server [3. Server & UI Update]
+        direction TB
+        L["Server handlers.js<br>chat_message event"] --> M["Save to MongoDB"]
+        M --> N["Emit receive_message<br>to sender + receiver"]
+        N -->|"Server echo<br>(same clientId)"| O["ChatViewModel: Delete local pending<br>Insert server-confirmed copy"]
+        N -->|"To receiver"| P["Receiver ChatViewModel:<br>Insert new MessageItem<br>Send read receipt if chat is open"]
+    end
 
-    E --> F{"Socket connected?"}
-
-    F -->|"Yes + Image"| G["Upload image<br>(POST /messages/upload)"]
-    G -->|"Server returns imageUrl"| H["socket.emit<br>chat_message"]
-
-    F -->|"Yes + Text only"| H
-
-    F -->|"No"| I["Message stays .pending<br>in SwiftData"]
-    I --> J["PendingMessageRetryService<br>connectionStatePublisher<br>.debounce(1s)"]
-    J -->|"Socket reconnects"| K["Batch retry all<br>.pending + .failed messages"]
-    K --> F
-
-    H -->|"Socket.IO"| L["Server handlers.js<br>chat_message event"]
-    L --> M["Save to MongoDB"]
-    M --> N["Emit receive_message<br>to sender + receiver"]
-
-    N -->|"Server echo<br>(same clientId)"| O["ChatViewModel: Delete local pending<br>Insert server-confirmed copy"]
-    N -->|"To receiver"| P["Receiver ChatViewModel:<br>Insert new MessageItem<br>Send read receipt if chat is open"]
+    E -.-> F
+    H -.-> L
 ```
 
 ### Video Calling (WebRTC + CallKit + PushKit)
@@ -219,28 +224,29 @@ idle → incomingRinging → connecting → active → ended
 4. WebRTC answer is generated and sent back via socket
 
 ```mermaid
-flowchart TD
+flowchart LR
     subgraph Caller["Caller (Device A)"]
+        direction TB
         A1["User taps video icon<br>in ChatView"] --> A2["CallManager<br>.startCall()"]
         A2 --> A3["CallKitManager startOutgoingCall()<br>Phase: outgoingRinging"]
         A3 --> A4["WebRTCClient setupWebRTC()<br>create offer (SDP)"]
         A4 --> A5["socket.emit<br>call-user"]
         A5 --> A6["Start offer retry<br>every 2 seconds"]
         A6 --> A7["Start ring timeout<br>30 seconds"]
+        A8["Caller setRemoteSDP<br>Phase: connecting"]
+        A7 -->|"30s no answer"| TIMEOUT["Phase: failed<br>No answer"]
     end
 
-    A5 -->|"Socket.IO"| S1
-
     subgraph NodeServer["Node.js Server"]
+        direction TB
         S1["handlers.js<br>call-user event"] --> S2["Store offer in<br>pendingOffers Map"]
         S2 --> S3["Send VoIP Push via<br>APNs (notificationService)"]
         S2 --> S4["Forward call-made event<br>to callee socket (if online)"]
+        S5["Server forwards answer<br>to caller"]
     end
 
-    S3 -->|"APNs VoIP Push"| R1
-    S4 -->|"Socket.IO"| R2
-
     subgraph Receiver["Receiver (Device B)"]
+        direction TB
         R1["PushKit<br>didReceiveIncomingPush"] --> R3["Force socket reconnect<br>if app in background"]
         R3 --> R4["CallKitManager reportIncomingCall()<br>iOS shows call UI"]
         R2["Socket: call-made<br>(if app was open)"] --> R4
@@ -257,18 +263,25 @@ flowchart TD
         R10 --> R11["Create answer (SDP)<br>socket.emit answer-call"]
     end
 
-    R11 -->|"Socket.IO"| S5["Server forwards answer<br>to caller"]
-    S5 --> A8["Caller setRemoteSDP<br>Phase: connecting"]
+    subgraph Connection["P2P Connection"]
+        direction TB
+        ICE["ICE Candidate Exchange<br>(both directions via socket)"]
+        CONN["ICE Connected OK<br>Phase: active<br>Video + Audio flowing"]
+        REC["ICE Recovery Timer<br>5 seconds"]
+        FAIL["Phase: failed<br>Connection lost"]
+        ICE --> CONN
+        ICE -->|"ICE failed"| REC
+        REC -->|"Timeout"| FAIL
+    end
 
-    A8 --> ICE["ICE Candidate Exchange<br>(both directions via socket)"]
-    R10 --> ICE
-
-    ICE --> CONN["ICE Connected OK<br>Phase: active<br>Video + Audio flowing"]
-
-    ICE -->|"ICE failed/disconnected"| REC["ICE Recovery Timer<br>5 seconds"]
-    REC -->|"Still disconnected"| FAIL["Phase: failed<br>Connection lost"]
-
-    A7 -->|"30s no answer"| TIMEOUT["Phase: failed<br>No answer"]
+    A5 -.->|"Socket.IO"| S1
+    S3 -.->|"APNs VoIP Push"| R1
+    S4 -.->|"Socket.IO"| R2
+    R11 -.->|"Socket.IO"| S5
+    S5 -.-> A8
+    
+    A8 -.-> ICE
+    R10 -.-> ICE
 ```
 
 **Race Condition Handling:**
