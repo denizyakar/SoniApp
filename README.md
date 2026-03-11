@@ -43,14 +43,15 @@ A full-stack iOS communication application featuring **real-time messaging**, **
 
 <!-- Add your screenshots here. Place image files in a /screenshots folder. -->
 <p align="center">
-  <img src="screenshots/login.png" width="200" alt="Login">
-  <img src="screenshots/chat_list.png" width="200" alt="Chat List">
-  <img src="screenshots/chat_view.png" width="200" alt="Chat View">
+  <img src="screenshots/authView.png" width="200" alt="Login">
+  <img src="screenshots/chatListView" width="200" alt="Chat List">
+  <img src="screenshots/chatView.png" width="200" alt="Chat View">
 </p>
 <p align="center">
-  <img src="screenshots/video_call.png" width="200" alt="Video Call">
-  <img src="screenshots/incoming_call.png" width="200" alt="Incoming Call">
-  <img src="screenshots/profile.png" width="200" alt="Profile">
+  <img src="screenshots/videoCallView.png" width="200" alt="Video Call">
+  <img src="screenshots/incomingCall.png" width="200" alt="Incoming Call">
+   <img src="screenshots/incomingCall2.png" width="200" alt="Incoming Call in App">
+  <img src="screenshots/profileView.png" width="200" alt="Profile">
 </p>
 
 ---
