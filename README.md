@@ -134,7 +134,7 @@ graph TD
 4. **Session Persistence:** The iOS client stores the JWT in `UserDefaults` via `SessionStore`. On app launch, if a valid token exists, the user is automatically authenticated without re-login.
 
 ```mermaid
-flowchart TD
+flowchart LR
     A["User Register"] -->|"POST /register"| B["Server: bcrypt.hash"]
     B -->|"Save"| C[("MongoDB: User Document")]
 
@@ -160,7 +160,7 @@ flowchart TD
 **Offline Queue:** Messages are persisted to SwiftData immediately, so they survive app kills. On reconnect, a Combine pipeline (`connectionStatePublisher` with `debounce`) triggers batch retry. Images are saved to `Documents/PendingImages/` first, uploaded to server on retry, then the socket emit fires with the server image URL.
 
 ```mermaid
-flowchart TD
+flowchart LR
     A["User taps Send"] --> B{"Has image?"}
 
     B -->|"Yes"| C["Save image to Documents/PendingImages/ (JPEG 0.8)"]
@@ -317,6 +317,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph AddUser["Add Contact Flow"]
+        direction LR
         AU1["User taps + -> AddUserView"] --> AU2["GET /users (JWT auth)"]
         AU2 --> AU3["Display users,<br>exclude existing contacts"]
         AU3 --> AU4["User taps Add"]
@@ -326,6 +327,7 @@ flowchart TD
     end
 
     subgraph Profile["Profile Update Flow"]
+        direction LR
         P1["User edits profile<br>in UserProfileView"] --> P2{"Changed avatar<br>photo?"}
         P2 -->|"Yes"| P3["PUT /users/:id/profile<br>(multipart)"]
         P2 -->|"No"| P4["PUT /users/:id/profile<br>{nickname, avatarName}"]
@@ -336,13 +338,16 @@ flowchart TD
         P7 --> P8["All clients update<br>user info in real-time"]
     end
 
-    subgraph Contacts["Contact List Lifecycle"]
+    subgraph ContactList["Contact List Lifecycle"]
+        direction LR
         C1["ChatListView onAppear"] --> C2["GET /contacts (JWT auth)"]
         C2 --> C3["Display contacts<br>with unread badges"]
         C3 --> C4["Swipe to delete<br>-> DELETE /contacts/remove"]
         C3 --> C6["Tap contact -> ChatView"]
         C6 --> C7["GET /messages?from=X&to=Y<br>-> SwiftData"]
     end
+
+    AddUser ~~~ Profile ~~~ ContactList
 ```
 
 ### Push Notification Suppression
