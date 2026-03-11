@@ -60,6 +60,7 @@ A full-stack iOS communication platform featuring **real-time messaging**, **pee
 The iOS client follows the **MVVM (Model–View–ViewModel)** pattern with a service layer. Views are purely declarative SwiftUI, ViewModels handle business logic and state via `@Published` properties, and a dedicated Repository layer abstracts SwiftData persistence from the rest of the app.
 
 ```mermaid
+%%{init: {"theme": "neutral"}}%%
 graph TD
     subgraph iOS["iOS Client - SwiftUI + MVVM"]
         Views["Views: ChatList - Chat - Call - Auth - Profile"]
@@ -134,6 +135,7 @@ graph TD
 4. **Session Persistence:** The iOS client stores the JWT in `UserDefaults` via `SessionStore`. On app launch, if a valid token exists, the user is automatically authenticated without re-login.
 
 ```mermaid
+%%{init: {"theme": "neutral"}}%%
 flowchart TD
     A["User Register"] -->|"POST /register"| B["Server: bcrypt.hash"]
     B -->|"Save"| C[("MongoDB: User Document")]
@@ -160,6 +162,7 @@ flowchart TD
 **Offline Queue:** Messages are persisted to SwiftData immediately, so they survive app kills. On reconnect, a Combine pipeline (`connectionStatePublisher` with `debounce`) triggers batch retry. Images are saved to `Documents/PendingImages/` first, uploaded to server on retry, then the socket emit fires with the server image URL.
 
 ```mermaid
+%%{init: {"theme": "neutral"}}%%
 flowchart TD
     A["User taps Send"] --> B{"Has image?"}
 
@@ -213,6 +216,7 @@ idle → incomingRinging → connecting → active → ended
 4. WebRTC answer is generated and sent back via socket
 
 ```mermaid
+%%{init: {"theme": "neutral"}}%%
 flowchart TD
     subgraph Caller["Caller (Device A)"]
         A1["User taps video icon in ChatView"] --> A2["CallManager.startCall()"]
@@ -287,6 +291,7 @@ flowchart TD
 Socket.IO is configured with infinite reconnect attempts (`reconnectAttempts: -1`) and a 2-second retry interval.
 
 ```mermaid
+%%{init: {"theme": "neutral"}}%%
 flowchart TD
     subgraph Triggers["Reconnect Triggers"]
         T1["App enters foreground"]
@@ -315,6 +320,7 @@ flowchart TD
 ### Contacts & Profile Management
 
 ```mermaid
+%%{init: {"theme": "neutral"}}%%
 flowchart TD
     subgraph AddUser["Add Contact Flow"]
         AU1["User taps + -> AddUserView"] --> AU2["GET /users (JWT auth)"]
