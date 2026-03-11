@@ -1,6 +1,6 @@
 # SoniApp
 
-A full-stack iOS communication application featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration, and **push notifications** — built with SwiftUI and a custom Node.js backend.
+A full-stack iOS communication platform featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration, and **push notifications** — built with SwiftUI and a custom Node.js backend.
 
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white) ![SwiftUI](https://img.shields.io/badge/SwiftUI-Framework-007AFF?logo=swift&logoColor=white) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-6+-47A248?logo=mongodb&logoColor=white) ![Socket.IO](https://img.shields.io/badge/Socket.IO-Realtime-010101?logo=socket.io&logoColor=white) ![WebRTC](https://img.shields.io/badge/WebRTC-Video_Calls-333333?logo=webrtc&logoColor=white) ![CallKit](https://img.shields.io/badge/CallKit-VoIP-007AFF?logo=apple&logoColor=white) ![Rocky Linux](https://img.shields.io/badge/Rocky_Linux-Self_Hosted-10B981?logo=linux&logoColor=white) ![Cloudflare](https://img.shields.io/badge/Cloudflare-Tunnel-F38020?logo=cloudflare&logoColor=white) ![JWT](https://img.shields.io/badge/JWT-Auth-000000?logo=jsonwebtokens&logoColor=white)
 
@@ -134,19 +134,25 @@ graph TD
 4. **Session Persistence:** The iOS client stores the JWT in `UserDefaults` via `SessionStore`. On app launch, if a valid token exists, the user is automatically authenticated without re-login.
 
 ```mermaid
-flowchart LR
-    A["User Register"] -->|"POST /register"| B["Server: bcrypt.hash"]
-    B -->|"Save"| C[("MongoDB: User Document")]
+flowchart TD
+    subgraph Registration
+        A["User Register"] -->|"POST /register"| B["Server: bcrypt.hash"]
+        B -->|"Save"| C[("MongoDB: User Document")]
+    end
 
-    D["User Login"] -->|"POST /login"| E["Server: bcrypt.compare"]
-    E -->|"Match OK"| F["jwt.sign - 365d expiry"]
-    E -->|"No Match"| H["401 Error"]
-    F -->|"Token"| G["iOS: SessionStore saves to UserDefaults"]
+    subgraph Login
+        D["User Login"] -->|"POST /login"| E["Server: bcrypt.compare"]
+        E -->|"No Match"| H["401 Error"]
+        E -->|"Match OK"| F["jwt.sign<br>365d expiry"]
+    end
 
-    G -->|"Every API request"| I["Authorization: Bearer token"]
-    I --> J["auth.js middleware: jwt.verify"]
-    J -->|"Valid"| K["Route Handler executes"]
-    J -->|"Invalid / Expired"| L["401 / 403 Rejected"]
+    subgraph Session Flow
+        F -->|"Token"| G["iOS: SessionStore saves<br>to UserDefaults"]
+        G -->|"Every API request"| I["Authorization:<br>Bearer token"]
+        I --> J["auth.js middleware:<br>jwt.verify"]
+        J -->|"Valid"| K["Route Handler executes"]
+        J -->|"Invalid / Expired"| L["401 / 403 Rejected"]
+    end
 ```
 
 ### Real-Time Messaging
@@ -160,34 +166,34 @@ flowchart LR
 **Offline Queue:** Messages are persisted to SwiftData immediately, so they survive app kills. On reconnect, a Combine pipeline (`connectionStatePublisher` with `debounce`) triggers batch retry. Images are saved to `Documents/PendingImages/` first, uploaded to server on retry, then the socket emit fires with the server image URL.
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["User taps Send"] --> B{"Has image?"}
 
-    B -->|"Yes"| C["Save image to Documents/PendingImages/ (JPEG 0.8)"]
-    C --> D["Create MessageItem - status: .pending - imageUrl: file://local"]
-    B -->|"No"| D2["Create MessageItem - status: .pending"]
+    B -->|"Yes"| C["Save image to<br>Documents/PendingImages/<br>(JPEG 0.8)"]
+    C --> D["Create MessageItem<br>status: .pending<br>imageUrl: file://local"]
+    B -->|"No"| D2["Create MessageItem<br>status: .pending"]
 
     D --> E["Insert to SwiftData"]
     D2 --> E
 
     E --> F{"Socket connected?"}
 
-    F -->|"Yes + Image"| G["Upload image (POST /messages/upload)"]
-    G -->|"Server returns imageUrl"| H["socket.emit chat_message"]
+    F -->|"Yes + Image"| G["Upload image<br>(POST /messages/upload)"]
+    G -->|"Server returns imageUrl"| H["socket.emit<br>chat_message"]
 
     F -->|"Yes + Text only"| H
 
-    F -->|"No"| I["Message stays .pending in SwiftData"]
-    I --> J["PendingMessageRetryService connectionStatePublisher .debounce(1s)"]
-    J -->|"Socket reconnects"| K["Batch retry all .pending + .failed messages"]
+    F -->|"No"| I["Message stays .pending<br>in SwiftData"]
+    I --> J["PendingMessageRetryService<br>connectionStatePublisher<br>.debounce(1s)"]
+    J -->|"Socket reconnects"| K["Batch retry all<br>.pending + .failed messages"]
     K --> F
 
-    H -->|"Socket.IO"| L["Server handlers.js chat_message event"]
+    H -->|"Socket.IO"| L["Server handlers.js<br>chat_message event"]
     L --> M["Save to MongoDB"]
-    M --> N["Emit receive_message to sender + receiver"]
+    M --> N["Emit receive_message<br>to sender + receiver"]
 
-    N -->|"Server echo (same clientId)"| O["ChatViewModel: Delete local pending - Insert server-confirmed copy"]
-    N -->|"To receiver"| P["Receiver ChatViewModel: Insert new MessageItem - Send read receipt if chat is open"]
+    N -->|"Server echo<br>(same clientId)"| O["ChatViewModel: Delete local pending<br>Insert server-confirmed copy"]
+    N -->|"To receiver"| P["Receiver ChatViewModel:<br>Insert new MessageItem<br>Send read receipt if chat is open"]
 ```
 
 ### Video Calling (WebRTC + CallKit + PushKit)
@@ -317,7 +323,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph AddUser["Add Contact Flow"]
-        direction LR
+        direction TB
         AU1["User taps + -> AddUserView"] --> AU2["GET /users (JWT auth)"]
         AU2 --> AU3["Display users,<br>exclude existing contacts"]
         AU3 --> AU4["User taps Add"]
@@ -327,7 +333,7 @@ flowchart TD
     end
 
     subgraph Profile["Profile Update Flow"]
-        direction LR
+        direction TB
         P1["User edits profile<br>in UserProfileView"] --> P2{"Changed avatar<br>photo?"}
         P2 -->|"Yes"| P3["PUT /users/:id/profile<br>(multipart)"]
         P2 -->|"No"| P4["PUT /users/:id/profile<br>{nickname, avatarName}"]
@@ -339,15 +345,13 @@ flowchart TD
     end
 
     subgraph ContactList["Contact List Lifecycle"]
-        direction LR
+        direction TB
         C1["ChatListView onAppear"] --> C2["GET /contacts (JWT auth)"]
         C2 --> C3["Display contacts<br>with unread badges"]
         C3 --> C4["Swipe to delete<br>-> DELETE /contacts/remove"]
         C3 --> C6["Tap contact -> ChatView"]
         C6 --> C7["GET /messages?from=X&to=Y<br>-> SwiftData"]
     end
-
-    AddUser ~~~ Profile ~~~ ContactList
 ```
 
 ### Push Notification Suppression
