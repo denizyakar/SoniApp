@@ -1,6 +1,6 @@
 # SoniApp
 
-A full-stack iOS communication application featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration, and **push notifications** — built with SwiftUI and a custom Node.js backend.
+A full-stack iOS communication platform featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration, and **push notifications** — built with SwiftUI and a custom Node.js backend.
 
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white) ![SwiftUI](https://img.shields.io/badge/SwiftUI-Framework-007AFF?logo=swift&logoColor=white) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-6+-47A248?logo=mongodb&logoColor=white) ![Socket.IO](https://img.shields.io/badge/Socket.IO-Realtime-010101?logo=socket.io&logoColor=white) ![WebRTC](https://img.shields.io/badge/WebRTC-Video_Calls-333333?logo=webrtc&logoColor=white) ![CallKit](https://img.shields.io/badge/CallKit-VoIP-007AFF?logo=apple&logoColor=white) ![Rocky Linux](https://img.shields.io/badge/Rocky_Linux-Self_Hosted-10B981?logo=linux&logoColor=white) ![Cloudflare](https://img.shields.io/badge/Cloudflare-Tunnel-F38020?logo=cloudflare&logoColor=white) ![JWT](https://img.shields.io/badge/JWT-Auth-000000?logo=jsonwebtokens&logoColor=white)
 
@@ -61,32 +61,36 @@ The iOS client follows the **MVVM (Model–View–ViewModel)** pattern with a se
 
 ```mermaid
 graph TD
-    subgraph iOS["iOS Client · SwiftUI + MVVM"]
-        Views["Views: ChatList · Chat · Call · Auth · Profile"]
-        VM["ViewModels: ChatVM · ChatListVM"]
-        Services["Services: SocketChatService · CallManager · WebRTCClient · VoIPPush · AuthService"]
-        Repo["Repositories: MessageRepo · UserRepo"]
+    subgraph iOS["iOS Client - SwiftUI + MVVM"]
+        Views["Views: ChatList - Chat - Call - Auth - Profile"]
+        VM["ViewModels: ChatVM - ChatListVM"]
+        Services["Services: SocketChatService - CallManager - WebRTCClient - VoIPPush - AuthService"]
+        Repo["Repositories: MessageRepo - UserRepo"]
         SD[("SwiftData @Model MessageItem")]
     end
 
-    Views --> VM --> Services
-    VM --> Repo --> SD
+    Views --> VM
+    VM --> Services
+    VM --> Repo
+    Repo --> SD
 
     Services -->|"Socket.IO + REST"| CF["Cloudflare Tunnel (HTTPS)"]
     CF --> Entry
 
-    subgraph Server["Node.js Server · Rocky Linux"]
-        Entry["server.js — Express + Socket.IO"]
-        Routes["Routes: auth · users · messages · contacts · tokens · calls"]
-        SocketH["Socket Handlers: chat · WebRTC signaling · read receipts"]
+    subgraph Server["Node.js Server - Rocky Linux"]
+        Entry["server.js - Express + Socket.IO"]
+        Routes["Routes: auth - users - messages - contacts - tokens - calls"]
+        SocketH["Socket Handlers: chat - WebRTC signaling - read receipts"]
         MW["Middleware: JWT Auth"]
         Notif["Services: APNs + VoIP Push"]
     end
 
-    Entry --> Routes & SocketH
+    Entry --> Routes
+    Entry --> SocketH
     Routes --> MW
     SocketH --> Notif
-    Routes & SocketH -->|"Mongoose"| DB[("MongoDB")]
+    Routes -->|"Mongoose"| DB[("MongoDB")]
+    SocketH -->|"Mongoose"| DB
 ```
 
 ---
@@ -131,16 +135,16 @@ graph TD
 
 ```mermaid
 flowchart TD
-    A["User Register"] -->|"POST /register {username, password}"| B["Server: bcrypt.hash(password, 10)"]
+    A["User Register"] -->|"POST /register"| B["Server: bcrypt.hash"]
     B -->|"Save"| C[("MongoDB: User Document")]
 
-    D["User Login"] -->|"POST /login {username, password}"| E["Server: bcrypt.compare()"]
-    E -->|"Match ✅"| F["jwt.sign() → {userId, username} · 365d expiry"]
-    E -->|"No Match ❌"| H["401 Error"]
+    D["User Login"] -->|"POST /login"| E["Server: bcrypt.compare"]
+    E -->|"Match OK"| F["jwt.sign -> 365d expiry"]
+    E -->|"No Match"| H["401 Error"]
     F -->|"Token"| G["iOS: SessionStore saves to UserDefaults"]
 
     G -->|"Every API request"| I["Authorization: Bearer token"]
-    I --> J["auth.js middleware: jwt.verify()"]
+    I --> J["auth.js middleware: jwt.verify"]
     J -->|"Valid"| K["Route Handler executes"]
     J -->|"Invalid / Expired"| L["401 / 403 Rejected"]
 ```
@@ -160,8 +164,8 @@ flowchart TD
     A["User taps Send"] --> B{"Has image?"}
 
     B -->|"Yes"| C["Save image to Documents/PendingImages/ (JPEG 0.8)"]
-    C --> D["Create MessageItem | status: .pending | imageUrl: file://local"]
-    B -->|"No"| D2["Create MessageItem | status: .pending"]
+    C --> D["Create MessageItem - status: .pending - imageUrl: file://local"]
+    B -->|"No"| D2["Create MessageItem - status: .pending"]
 
     D --> E["Insert to SwiftData"]
     D2 --> E
@@ -169,21 +173,21 @@ flowchart TD
     E --> F{"Socket connected?"}
 
     F -->|"Yes + Image"| G["Upload image (POST /messages/upload)"]
-    G -->|"Server returns imageUrl"| H["socket.emit chat_message {text, senderId, receiverId, clientId, imageUrl}"]
+    G -->|"Server returns imageUrl"| H["socket.emit chat_message"]
 
     F -->|"Yes + Text only"| H
 
-    F -->|"No ❌"| I["Message stays .pending in SwiftData"]
+    F -->|"No"| I["Message stays .pending in SwiftData"]
     I --> J["PendingMessageRetryService listens connectionStatePublisher .debounce(1s)"]
     J -->|"Socket reconnects"| K["Batch retry all .pending + .failed messages"]
     K --> F
 
     H -->|"Socket.IO"| L["Server handlers.js chat_message event"]
-    L --> M["Save to MongoDB {text, senderId, receiverId, clientId, imageUrl, date}"]
+    L --> M["Save to MongoDB"]
     M --> N["Emit receive_message to sender + receiver"]
 
-    N -->|"Server echo (same clientId)"| O["ChatViewModel: Delete local pending | Insert server-confirmed copy"]
-    N -->|"To receiver"| P["Receiver ChatViewModel: Insert new MessageItem | Send read receipt if chat is open"]
+    N -->|"Server echo (same clientId)"| O["ChatViewModel: Delete local pending - Insert server-confirmed copy"]
+    N -->|"To receiver"| P["Receiver ChatViewModel: Insert new MessageItem - Send read receipt if chat is open"]
 ```
 
 ### Video Calling (WebRTC + CallKit + PushKit)
@@ -211,10 +215,10 @@ idle → incomingRinging → connecting → active → ended
 ```mermaid
 flowchart TD
     subgraph Caller["Caller (Device A)"]
-        A1["User taps 📹 in ChatView"] --> A2["CallManager.startCall()"]
-        A2 --> A3["CallKitManager startOutgoingCall() | Phase: outgoingRinging"]
-        A3 --> A4["WebRTCClient setupWebRTC() | create offer (SDP)"]
-        A4 --> A5["socket.emit call-user {offer, to, callerId, callerName, callerAvatarUrl}"]
+        A1["User taps video icon in ChatView"] --> A2["CallManager.startCall()"]
+        A2 --> A3["CallKitManager startOutgoingCall() - Phase: outgoingRinging"]
+        A3 --> A4["WebRTCClient setupWebRTC() - create offer (SDP)"]
+        A4 --> A5["socket.emit call-user"]
         A5 --> A6["Start offer retry every 2 seconds"]
         A6 --> A7["Start ring timeout 30 seconds"]
     end
@@ -232,33 +236,33 @@ flowchart TD
 
     subgraph Receiver["Receiver (Device B)"]
         R1["PushKit didReceiveIncomingPush"] --> R3["Force socket reconnect if app in background"]
-        R3 --> R4["CallKitManager reportIncomingCall() | iOS shows call UI"]
+        R3 --> R4["CallKitManager reportIncomingCall() - iOS shows call UI"]
         R2["Socket: call-made (if app was open)"] --> R4
 
-        R4 --> R5["Phase: incomingRinging | Start ring timeout 30s"]
+        R4 --> R5["Phase: incomingRinging - Start ring timeout 30s"]
         R5 --> R6["User accepts call"]
         R6 --> R7{"SDP offer arrived via socket?"}
 
-        R7 -->|"Yes ✅"| R8["executeWebRTCAccept()"]
-        R7 -->|"No ❌ (cold boot)"| R9["HTTP Fallback GET /api/calls/pending/:userId (JWT auth)"]
+        R7 -->|"Yes"| R8["executeWebRTCAccept()"]
+        R7 -->|"No (cold boot)"| R9["HTTP Fallback GET /api/calls/pending/:userId"]
         R9 --> R8
 
-        R8 --> R10["setupWebRTC() | setRemoteSDP(offer) | Flush pendingICECandidates"]
-        R10 --> R11["Create answer (SDP) | socket.emit answer-call"]
+        R8 --> R10["setupWebRTC() - setRemoteSDP(offer) - Flush pendingICECandidates"]
+        R10 --> R11["Create answer (SDP) - socket.emit answer-call"]
     end
 
     R11 -->|"Socket.IO"| S5["Server forwards answer to caller"]
-    S5 --> A8["Caller setRemoteSDP | Phase: connecting"]
+    S5 --> A8["Caller setRemoteSDP - Phase: connecting"]
 
     A8 --> ICE["ICE Candidate Exchange (both directions via socket)"]
     R10 --> ICE
 
-    ICE --> CONN["ICE Connected ✅ | Phase: active | Video + Audio flowing"]
+    ICE --> CONN["ICE Connected OK - Phase: active - Video + Audio flowing"]
 
     ICE -->|"ICE failed/disconnected"| REC["ICE Recovery Timer 5 seconds"]
-    REC -->|"Still disconnected"| FAIL["Phase: failed | Connection lost"]
+    REC -->|"Still disconnected"| FAIL["Phase: failed - Connection lost"]
 
-    A7 -->|"30s no answer"| TIMEOUT["Phase: failed | No answer"]
+    A7 -->|"30s no answer"| TIMEOUT["Phase: failed - No answer"]
 ```
 
 **Race Condition Handling:**
@@ -285,27 +289,27 @@ Socket.IO is configured with infinite reconnect attempts (`reconnectAttempts: -1
 ```mermaid
 flowchart TD
     subgraph Triggers["Reconnect Triggers"]
-        T1["App enters foreground (UIApplication willEnterForeground)"]
-        T2["NWPathMonitor detects network restored (status: .satisfied)"]
-        T3["NWPathMonitor detects interface change (WiFi → Cellular)"]
-        T4["Socket.IO auto-reconnect (reconnectAttempts: -1, retry every 2s)"]
+        T1["App enters foreground"]
+        T2["NWPathMonitor detects network restored"]
+        T3["NWPathMonitor detects interface change"]
+        T4["Socket.IO auto-reconnect"]
     end
 
     T1 -->|"isConnected == false"| CONN["SocketChatService connect()"]
     T2 --> CONN
-    T3 --> FORCE["forceReconnect() | disconnect → wait 0.5s → connect"]
+    T3 --> FORCE["forceReconnect() - disconnect - wait 0.5s - connect"]
     FORCE --> CONN
     T4 --> CONN
 
-    CONN --> REG["Socket connected ✅ | Emit register(userId) | Server maps userId → socketId"]
+    CONN --> REG["Socket connected - Emit register(userId)"]
 
     REG --> PUB["connectionStatePublisher .send(true)"]
 
-    PUB --> RETRY["PendingMessageRetryService .debounce(1s) | Fetch all .pending/.failed from SwiftData"]
+    PUB --> RETRY["PendingMessageRetryService .debounce(1s) - Fetch pending from SwiftData"]
     PUB --> READ["ChatViewModel retryPendingMessages()"]
-    PUB --> FLUSH["Server flushes buffered ICE candidates (if any)"]
+    PUB --> FLUSH["Server flushes buffered ICE candidates"]
 
-    RETRY --> BATCH["Batch retry: For each message → upload image if local → socket.emit chat_message"]
+    RETRY --> BATCH["Batch retry: For each message -> upload image if local -> socket.emit chat_message"]
 ```
 
 ### Contacts & Profile Management
@@ -313,12 +317,12 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph AddUser["Add Contact Flow"]
-        AU1["User taps + → AddUserView"] --> AU2["GET /users (JWT auth)"]
+        AU1["User taps + -> AddUserView"] --> AU2["GET /users (JWT auth)"]
         AU2 --> AU3["Display users, exclude existing contacts"]
         AU3 --> AU4["User taps Add"]
         AU4 --> AU5["POST /contacts/add {contactId}"]
-        AU5 --> AU6["Server: User.contacts.push() → MongoDB"]
-        AU6 --> AU7["NotificationCenter .contactAdded → ChatListView refreshes"]
+        AU5 --> AU6["Server: User.contacts.push() -> MongoDB"]
+        AU6 --> AU7["NotificationCenter .contactAdded -> ChatListView refreshes"]
     end
 
     subgraph Profile["Profile Update Flow"]
@@ -335,9 +339,9 @@ flowchart TD
     subgraph Contacts["Contact List Lifecycle"]
         C1["ChatListView onAppear"] --> C2["GET /contacts (JWT auth)"]
         C2 --> C3["Display contacts with unread badges"]
-        C3 --> C4["Swipe to delete → DELETE /contacts/remove"]
-        C3 --> C6["Tap contact → ChatView"]
-        C6 --> C7["GET /messages?from=X&to=Y → SwiftData"]
+        C3 --> C4["Swipe to delete -> DELETE /contacts/remove"]
+        C3 --> C6["Tap contact -> ChatView"]
+        C6 --> C7["GET /messages?from=X&to=Y -> SwiftData"]
     end
 ```
 
