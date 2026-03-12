@@ -22,7 +22,7 @@ A full-stack iOS communication application featuring **real-time messaging**, **
   - [Read Receipts](#read-receipts)
 - [Challenges & Solutions](#challenges--solutions)
 - [Design Decisions](#design-decisions)
-- [Setup & Deployment Guide 🛠️](#setup--deployment-guide-️)
+- [Setup & Deployment Guide](#setup--deployment-guide-️)
 
 ---
 
@@ -389,7 +389,7 @@ Real-world problems encountered during development and the solutions that were i
 
 ---
 
-## Setup & Deployment Guide 🛠️
+## Setup & Deployment Guide 
 
 To run this application locally or deploy it to production, you must configure both the custom Node.js backend and the iOS App. Since this repository is an open-source template, all private API Keys, URLs, and Bundle Identifiers have been replaced with placeholders.
 
