@@ -45,16 +45,16 @@ A full-stack iOS communication application featuring **real-time messaging**, **
 <div align="center">
   <table>
     <tr>
-      <td align="center"><b>Login</b><br><img src="screenshots/authView.PNG" width="200"></td>
-      <td align="center"><b>Chat List</b><br><img src="screenshots/chatListView.PNG" width="200"></td>
-      <td align="center"><b>Chat View</b><br><img src="screenshots/chatView.PNG" width="200"></td>
-      <td align="center"><b>Profile</b><br><img src="screenshots/profileView.PNG" width="200"></td>
+      <td align="center"><b>Login</b><br><img src="screenshots/authView.PNG" width="250"></td>
+      <td align="center"><b>Chat List</b><br><img src="screenshots/chatListView.PNG" width="250"></td>
+      <td align="center"><b>Chat View</b><br><img src="screenshots/chatView.PNG" width="250"></td>
+      <td align="center"><b>Profile</b><br><img src="screenshots/profileView.PNG" width="250"></td>
     </tr>
     <tr>
-      <td align="center"><b>Outgoing Call</b><br><img src="screenshots/outgoingCallView.PNG" width="200"></td>
-      <td align="center"><b>Incoming Call</b><br><img src="screenshots/incomingCall.PNG" width="200"></td>
-      <td align="center"><b>Incoming (In-App)</b><br><img src="screenshots/incomingCall2.PNG" width="200"></td>
-      <td align="center"><b>Video Call</b><br><img src="screenshots/videoCallView.png" width="200"></td>
+      <td align="center"><b>Outgoing Call</b><br><img src="screenshots/outgoingCallView.png" width="250"></td>
+      <td align="center"><b>Incoming Call</b><br><img src="screenshots/incomingCall.PNG" width="250"></td>
+      <td align="center"><b>Incoming (In-App)</b><br><img src="screenshots/incomingCall2.PNG" width="250"></td>
+      <td align="center"><b>Video Call</b><br><img src="screenshots/videoCallView.png" width="250"></td>
     </tr>
   </table>
 </div>
