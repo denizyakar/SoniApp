@@ -42,17 +42,22 @@ A full-stack iOS communication application featuring **real-time messaging**, **
 ## Screenshots
 
 <!-- Add your screenshots here. Place image files in a /screenshots folder. -->
-<p align="center">
-  <img src="screenshots/authView.PNG" width="200" alt="Login">
-  <img src="screenshots/chatListView.PNG" width="200" alt="Chat List">
-  <img src="screenshots/chatView.PNG" width="200" alt="Chat View">
-</p>
-<p align="center">
-  <img src="screenshots/videoCallView.png" width="200" alt="Video Call">
-  <img src="screenshots/incomingCall.PNG" width="200" alt="Incoming Call">
-   <img src="screenshots/incomingCall2.PNG" width="200" alt="Incoming Call in App">
-  <img src="screenshots/profileView.PNG" width="200" alt="Profile">
-</p>
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><b>Login</b><br><img src="screenshots/authView.PNG" width="200"></td>
+      <td align="center"><b>Chat List</b><br><img src="screenshots/chatListView.PNG" width="200"></td>
+      <td align="center"><b>Chat View</b><br><img src="screenshots/chatView.PNG" width="200"></td>
+      <td align="center"><b>Profile</b><br><img src="screenshots/profileView.PNG" width="200"></td>
+    </tr>
+    <tr>
+      <td align="center"><b>Outgoing Call</b><br><img src="screenshots/outgoingCallView.PNG" width="200"></td>
+      <td align="center"><b>Incoming Call</b><br><img src="screenshots/incomingCall.PNG" width="200"></td>
+      <td align="center"><b>Incoming (In-App)</b><br><img src="screenshots/incomingCall2.PNG" width="200"></td>
+      <td align="center"><b>Video Call</b><br><img src="screenshots/videoCallView.png" width="200"></td>
+    </tr>
+  </table>
+</div>
 
 ---
 
