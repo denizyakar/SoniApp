@@ -22,7 +22,7 @@ A full-stack iOS communication application featuring **real-time messaging**, **
   - [Read Receipts](#read-receipts)
 - [Challenges & Solutions](#challenges--solutions)
 - [Design Decisions](#design-decisions)
-- [Setup & Deployment Guide](#setup--deployment-guide-️)
+- [Setup & Deployment Guide](#setup--deployment-guide)
 
 ---
 
