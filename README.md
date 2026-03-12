@@ -389,7 +389,7 @@ Real-world problems encountered during development and the solutions that were i
 
 ---
 
-## Setup & Deployment Guide 
+## Setup & Deployment Guide
 
 To run this application locally or deploy it to production, you must configure both the custom Node.js backend and the iOS App. Since this repository is an open-source template, all private API Keys, URLs, and Bundle Identifiers have been replaced with placeholders.
 
