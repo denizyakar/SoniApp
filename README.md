@@ -399,10 +399,10 @@ The backend is built with Express, Socket.io, and MongoDB natively, without rely
 
 #### Step 1A: Install Dependencies
 Navigate to the `nodejsServer` directory and install the required packages:
-\`\`\`bash
+```bash
 cd nodejsServer
 npm install apn bcryptjs cors express jsonwebtoken mongoose multer socket.io
-\`\`\`
+```
 
 #### Step 1B: Configure Database & Domain
 Open `nodejsServer/server.js` and update the following variables:
@@ -425,13 +425,13 @@ To support CallKit VoIP calls and standard APNs messages, you must configure the
 
 #### Step 1E: Start the Server
 Run the application on port 10000.
-\`\`\`bash
+```bash
 node server.js
-\`\`\`
+```
 If you use Cloudflare for tunneling, you can directly start the server.sh which launches both node.js and cloudflare.
-\`\`\`bash
+```bash
 ./server.sh
-\`\`\`
+```
 *(Tip: For production, use PM2: `pm2 start server.js`. Expose the server via a reverse proxy using HTTPS so iOS App Transport Security does not block the connection).*
 
 ---
