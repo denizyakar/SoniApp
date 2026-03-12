@@ -1,6 +1,6 @@
 # SoniApp
 
-A full-stack iOS communication application featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration, and **push notifications** — built with SwiftUI and a custom Node.js backend.
+A full-stack iOS communication application featuring **real-time messaging**, **peer-to-peer video calling** with CallKit integration and **push notifications** — built with SwiftUI and a custom Node.js backend.
 
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white) ![SwiftUI](https://img.shields.io/badge/SwiftUI-Framework-007AFF?logo=swift&logoColor=white) ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-6+-47A248?logo=mongodb&logoColor=white) ![Socket.IO](https://img.shields.io/badge/Socket.IO-Realtime-010101?logo=socket.io&logoColor=white) ![WebRTC](https://img.shields.io/badge/WebRTC-Video_Calls-333333?logo=webrtc&logoColor=white) ![CallKit](https://img.shields.io/badge/CallKit-VoIP-007AFF?logo=apple&logoColor=white) ![Rocky Linux](https://img.shields.io/badge/Rocky_Linux-Self_Hosted-10B981?logo=linux&logoColor=white) ![Cloudflare](https://img.shields.io/badge/Cloudflare-Tunnel-F38020?logo=cloudflare&logoColor=white) ![JWT](https://img.shields.io/badge/JWT-Auth-000000?logo=jsonwebtokens&logoColor=white)
 
