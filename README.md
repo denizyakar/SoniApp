@@ -22,6 +22,7 @@ A full-stack iOS communication application featuring **real-time messaging**, **
   - [Read Receipts](#read-receipts)
 - [Challenges & Solutions](#challenges--solutions)
 - [Design Decisions](#design-decisions)
+- [Setup & Deployment Guide 🛠️](#setup--deployment-guide-️)
 
 ---
 
@@ -385,6 +386,79 @@ Real-world problems encountered during development and the solutions that were i
 | **clientId echo pattern** | Each outgoing message gets a UUID `clientId`. When the server echoes it back, the local pending copy is replaced with the confirmed version. Prevents message duplication |
 | **NWPathMonitor over Reachability** | First-party Apple API with interface-type granularity. Detects WiFi↔cellular transitions that leave sockets in a zombie state |
 | **Cloudflare Tunnel over port forwarding** | No open ports on the Rocky Linux server. HTTPS termination and DDoS protection are handled at Cloudflare's edge |
+
+---
+
+## Setup & Deployment Guide 🛠️
+
+To run this application locally or deploy it to production, you must configure both the custom Node.js backend and the iOS App. Since this repository is an open-source template, all private API Keys, URLs, and Bundle Identifiers have been replaced with placeholders.
+
+### 1. Backend Setup (Node.js)
+
+The backend is built with Express, Socket.io, and MongoDB natively, without relying on `.env` files for its core secrets. You will need to manually replace the placeholders inside the source code.
+
+#### Step 1A: Install Dependencies
+Navigate to the `nodejsServer` directory and install the required packages:
+\`\`\`bash
+cd nodejsServer
+npm install apn bcryptjs cors express jsonwebtoken mongoose multer socket.io
+\`\`\`
+
+#### Step 1B: Configure Database & Domain
+Open `nodejsServer/server.js` and update the following variables:
+- **Line 28:** Change `const uri = "YOUR_MONGODB_URI";` to your actual MongoDB connection string.
+- **Line 46:** Change `origin: "YOUR_DOMAIN"` to the domain where your server will be hosted (e.g., `https://my-soniapp.com` or `*` for local testing).
+
+#### Step 1C: Configure JWT Secret
+Open `nodejsServer/middleware/auth.js`:
+- **Line 2:** Change `const JWT_SECRET = 'YOUR_JWT_SECRET';` to a strong, random string that will be used to sign user authentication tokens.
+
+#### Step 1D: Configure Push Notifications & VoIP
+To support CallKit VoIP calls and standard APNs messages, you must configure the `apn` service wrapper.
+1. Download your **Apple Push Notification Authentication Key** (`.p8` file) from your Apple Developer account.
+2. Rename the file to exactly `AuthKey.p8` and place it directly inside the `nodejsServer/services/` directory.
+3. Open `nodejsServer/services/notificationService.js` and update:
+   - **Line 8:** `keyId: 'YOUR_KEY_ID'` (Your 10-character Apple Key ID).
+   - **Line 9:** `teamId: 'YOUR_TEAM_ID'` (Your 10-character Apple Team ID).
+   - **Line 21:** `notification.topic = "YOUR_BUNDLE_ID";` (Replace with your iOS App's bundle identifier, e.g., `com.myname.SoniApp`).
+   - **Line 52:** `voipNotification.topic = "YOUR_BUNDLE_ID.voip";` (Replace with your bundle identifier + `.voip`. E.g., `com.myname.SoniApp.voip`).
+
+#### Step 1E: Start the Server
+Run the application on port 10000.
+\`\`\`bash
+node server.js
+\`\`\`
+If you use Cloudflare for tunneling, you can directly start the server.sh which launches both node.js and cloudflare.
+\`\`\`bash
+./server.sh
+\`\`\`
+*(Tip: For production, use PM2: `pm2 start server.js`. Expose the server via a reverse proxy using HTTPS so iOS App Transport Security does not block the connection).*
+
+---
+
+### 2. iOS Setup (Xcode)
+
+#### Step 2A: Update Identifiers & Signing
+1. Open `SoniApp.xcodeproj` in Xcode 15 or later.
+2. Select the `SoniApp` target and go to the **Signing & Capabilities** tab.
+3. Change the **Bundle Identifier** from the default placeholder to your own unique string (e.g., `com.myname.SoniApp`). *This must exactly match the `YOUR_BUNDLE_ID` you set in the Node.js server.*
+4. Select your personal Apple Developer **Team** to enable automatic code signing.
+
+#### Step 2B: Configure App Capabilities
+Still within the **Signing & Capabilities** tab, verify and configure the following:
+- **Push Notifications:** Must be checked and active.
+- **Background Modes:** Ensure both **Voice over IP** and **Remote notifications** are checked so the app can wake up for background CallKit events.
+
+#### Step 2C: Link the iOS App to your API
+1. Open `SoniApp/Core/APIEndpoints.swift` in Xcode.
+2. Find `static let baseURL = "your_domain_url"`.
+3. Replace `"your_domain_url"` with the live URL of your Node.js backend (e.g., `"https://my-soniapp.com"`). **Do not** add a trailing slash.
+
+#### Step 2D: Build and Run
+- Select your **Physical iPhone** as the run destination.
+- Press `Cmd + R` to build the app and install it onto your device.
+
+> ⚠️ **Important Note for Simulators:** CallKit VoIP Push Notifications and WebRTC Camera hardware access **strictly require a physical iOS device**. If you run this project on an Xcode Simulator, the video feed will be black and incoming background calls will not ring.
 
 ---
 
